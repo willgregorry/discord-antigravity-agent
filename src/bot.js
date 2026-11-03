@@ -865,7 +865,7 @@ class DiscordAntigravityBot {
           .setFooter({ text: 'Konteks scratchpad otomatis diikutsertakan dalam prompt Antigravity AI!' });
         await interaction.reply({ embeds: [embed] });
       }
-    } else if (commandName === 'join-vc') {
+    } else if (commandName === 'join' || commandName === 'join-vc') {
       const member = interaction.member;
       const voiceChannel = member?.voice?.channel;
       if (!voiceChannel) {
@@ -879,7 +879,7 @@ class DiscordAntigravityBot {
       } catch (err) {
         await interaction.reply({ content: `❌ Gagal bergabung ke Voice Channel: ${err.message}`, ephemeral: true });
       }
-    } else if (commandName === 'leave-vc') {
+    } else if (commandName === 'leave' || commandName === 'leave-vc') {
       const success = this.voiceService.leave(interaction.guildId);
       if (success) {
         await interaction.reply('👋 Berhasil keluar dari Voice Channel.');
