@@ -3,7 +3,8 @@ const path = require('path');
 
 class NotesService {
   constructor(filePath) {
-    this.filePath = filePath || path.join(__dirname, 'notes.json');
+    const rootDir = path.resolve(__dirname, '..', '..');
+    this.filePath = filePath || path.join(rootDir, 'notes.json');
     this.notes = {};
     this.load();
   }

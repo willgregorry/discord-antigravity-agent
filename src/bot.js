@@ -59,13 +59,14 @@ const {
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const { AgyRunner } = require('./agy-runner');
-const { QuotaService } = require('./quota-service');
-const { TunnelService } = require('./tunnel-service');
-const { SystemService } = require('./system-service');
-const { GitService } = require('./git-service');
-const { NotesService } = require('./notes-service');
-const { WatchdogService } = require('./watchdog-service');
+const { AgyRunner } = require('./core/agy-runner');
+const { QuotaService } = require('./services/quota-service');
+const { TunnelService } = require('./services/tunnel-service');
+const { SystemService } = require('./services/system-service');
+const { GitService } = require('./services/git-service');
+const { NotesService } = require('./services/notes-service');
+const { WatchdogService } = require('./services/watchdog-service');
+const ROOT_DIR = path.resolve(__dirname, '..');
 
 class ChannelSession {
   constructor(channelId, cwd, model = 'gemini-3.8-flash-medium') {
@@ -97,7 +98,7 @@ class DiscordAntigravityBot {
     this.tunnelService = new TunnelService();
     this.systemService = new SystemService();
     this.gitService = new GitService();
-    this.notesService = new NotesService(path.join(__dirname, 'notes.json'));
+    this.notesService = new NotesService(path.join(ROOT_DIR, 'notes.json'));
     this.watchdogService = new WatchdogService();
 
     this.client = new Client({
@@ -272,7 +273,7 @@ class DiscordAntigravityBot {
   }
 
   loadSessions() {
-    const p = path.join(__dirname, 'sessions.json');
+    const p = path.join(ROOT_DIR, 'sessions.json');
     if (fs.existsSync(p)) {
       try {
         const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -289,7 +290,7 @@ class DiscordAntigravityBot {
   }
 
   saveSessions() {
-    const p = path.join(__dirname, 'sessions.json');
+    const p = path.join(ROOT_DIR, 'sessions.json');
     const data = {};
     for (const [id, s] of this.sessions.entries()) {
       data[id] = {
@@ -674,7 +675,7 @@ class DiscordAntigravityBot {
         const cleanOutput = output.trim();
         if (cleanOutput.length > 1900) {
           const channelFolder = sanitizeFolderName(interaction.channel?.name || 'exec');
-          const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+          const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
           if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
           const tempFile = path.join(tempDir, `exec_${Date.now()}.txt`);
           fs.writeFileSync(tempFile, cleanOutput, 'utf8');
@@ -782,7 +783,7 @@ class DiscordAntigravityBot {
       await interaction.deferReply();
       try {
         const channelFolder = sanitizeFolderName(interaction.channel?.name || 'screenshots');
-        const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+        const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const filePath = path.join(tempDir, `screen_${Date.now()}.png`);
         await this.systemService.captureScreenshot(filePath);
@@ -874,7 +875,7 @@ class DiscordAntigravityBot {
       const diff = await this.gitService.getDiff(session.cwd);
       if (diff.length > 1900) {
         const channelFolder = sanitizeFolderName(interaction.channel?.name || 'git');
-        const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+        const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const tempFile = path.join(tempDir, `git_diff_${Date.now()}.patch`);
         fs.writeFileSync(tempFile, diff, 'utf8');
@@ -1068,7 +1069,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         const clean = output.trim();
         if (clean.length > 1900) {
           const channelFolder = sanitizeFolderName(message.channel?.name || 'exec');
-          const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+          const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
           if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
           const tempFile = path.join(tempDir, `exec_${Date.now()}.txt`);
           fs.writeFileSync(tempFile, clean, 'utf8');
@@ -1099,7 +1100,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     } else if (cmd === 'screen' || cmd === 'screenshot') {
       try {
         const channelFolder = sanitizeFolderName(message.channel?.name || 'screenshots');
-        const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+        const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const filePath = path.join(tempDir, `screen_${Date.now()}.png`);
         await this.systemService.captureScreenshot(filePath);
@@ -1256,7 +1257,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     let fullPrompt = message.content;
     if (message.attachments && message.attachments.size > 0) {
       const channelFolder = sanitizeFolderName(message.channel?.name || message.channelId || 'general');
-      const downloadDir = path.join(__dirname, 'temp_downloads', channelFolder);
+      const downloadDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
       if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
 
       const downloadedFiles = [];

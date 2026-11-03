@@ -5,7 +5,8 @@ const fs = require('fs');
 class TunnelService {
   constructor() {
     this.activeTunnels = new Map(); // channelId -> { process, url, port }
-    this.cloudflaredPath = path.join(__dirname, 'bin', 'cloudflared.exe');
+    const rootDir = path.resolve(__dirname, '..', '..');
+    this.cloudflaredPath = process.env.CLOUDFLARED_PATH || path.join(rootDir, 'bin', 'cloudflared.exe');
   }
 
   async startTunnel(channelId, port) {

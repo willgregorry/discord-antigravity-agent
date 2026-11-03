@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0"
+cd /d "%~dp0\.."
 title Antigravity Discord Agent - Setup
 echo Installing dependencies...
 call npm install
