@@ -111,7 +111,7 @@ async function runSetup() {
   console.log('======================================================');
   console.log('Untuk menjalankan bot:');
   console.log('  npm start\n');
-  console.log('Atau di Windows, kamu bisa langsung double-click start.bat\n');
+  console.log('Atau di Windows, kamu bisa langsung double-click scripts/start.bat\n');
 
   rl.close();
 }

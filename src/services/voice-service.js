@@ -148,7 +148,8 @@ class VoiceService {
       const voiceName = item.voice || this.defaultVoice;
       await this.tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
-      const voiceTempDir = path.join(__dirname, 'temp_downloads', 'voice');
+      const rootDir = path.resolve(__dirname, '..', '..');
+      const voiceTempDir = path.join(rootDir, 'temp_downloads', 'voice');
       if (!fs.existsSync(voiceTempDir)) fs.mkdirSync(voiceTempDir, { recursive: true });
 
       const res = await this.tts.toFile(voiceTempDir, item.text);

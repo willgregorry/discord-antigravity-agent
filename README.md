@@ -48,7 +48,7 @@ cd discord-antigravity-agent
 Jalankan wizard otomatis untuk menginstal dependensi dan mengonfigurasi kredensial:
 
 **Di Windows (1-Klik):**
-> Cukup double-click file `setup.bat`
+> Cukup double-click file `scripts/setup.bat`
 
 **Atau via Terminal:**
 ```bash
@@ -83,12 +83,46 @@ Jalankan perintah berikut:
 ```bash
 npm start
 ```
-*Di Windows, kamu juga bisa langsung double-click `start.bat`.*
+*Di Windows, kamu juga bisa langsung double-click `scripts/start.bat`.*
 
 Setelah bot online di Discord, kirim pesan di channel atau gunakan slash command seperti:
 - `/cwd` - Cek direktori kerja saat ini
 - `/model` - Ganti model AI untuk channel tersebut
 - `/notes` - Catatan cepat per sesi
+
+---
+
+## 📁 Struktur Direktori Proyek
+
+```text
+├── scripts/                  # Skrip otomasi & launcher (.bat, .vbs)
+│   ├── start.bat
+│   ├── stop.bat
+│   ├── restart.bat
+│   ├── setup.bat
+│   └── start-hidden.vbs
+├── src/                      # Source code utama
+│   ├── bot.js                # Discord client & handler slash command
+│   ├── core/                 # Core engine Antigravity CLI & agent
+│   │   ├── agy-runner.js
+│   │   ├── agent.js
+│   │   └── tools.js
+│   └── services/             # Modular background services
+│       ├── git-service.js
+│       ├── notes-service.js
+│       ├── quota-service.js
+│       ├── system-service.js
+│       ├── tunnel-service.js
+│       └── watchdog-service.js
+├── tests/                    # Pengujian modul
+├── index.js                  # Entry point aplikasi
+├── setup.js                  # CLI setup wizard interaktif
+├── config.example.json
+├── .env.example
+├── .gitignore
+├── package.json
+└── README.md
+```
 
 ---
 

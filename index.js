@@ -1,6 +1,6 @@
 require('dotenv').config();
 const path = require('path');
-const { DiscordAntigravityBot } = require('./bot');
+const { DiscordAntigravityBot } = require('./src/bot');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
