@@ -1,0 +1,44 @@
+{
+  "default_model": "gemini-3.8-flash-medium",
+  "available_models": [
+    {
+      "label": "Gemini 3.8 Flash (Medium) - Default",
+      "value": "gemini-3.8-flash-medium"
+    },
+    {
+      "label": "Gemini 3.8 Flash (High Reasoning)",
+      "value": "gemini-3.8-flash-high"
+    },
+    {
+      "label": "Gemini 3.8 Flash (Low Effort)",
+      "value": "gemini-3.8-flash-low"
+    },
+    {
+      "label": "Claude Sonnet 4.6 (Thinking)",
+      "value": "claude-sonnet-4-6"
+    },
+    {
+      "label": "Claude Opus 4.6 (Thinking)",
+      "value": "claude-opus-4-6-thinking"
+    },
+    {
+      "label": "GPT-OSS 120B (Medium)",
+      "value": "gpt-oss-120b-medium"
+    }
+  ],
+  "channel_directories": {
+    "general": "./projects",
+    "project-a": "./projects/project-a",
+    "project-b": "./projects/project-b"
+  },
+  "favorite_projects": [
+    {
+      "name": "🚀 Project A",
+      "path": "./projects/project-a"
+    },
+    {
+      "name": "🌐 Project B",
+      "path": "./projects/project-b"
+    }
+  ]
+}

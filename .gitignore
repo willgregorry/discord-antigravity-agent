@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables & secrets
+.env
+config.json
+
+# Session history & local state
+sessions.json
+notes.json
+temp_downloads/
+*.log
+
+# Binaries & tools
+bin/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
