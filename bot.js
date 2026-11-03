@@ -34,6 +34,11 @@ function formatRelativeTime(isoString) {
   return `<t:${timestamp}:R> (<t:${timestamp}:t>)`;
 }
 
+function sanitizeFolderName(name) {
+  if (!name) return 'general';
+  return name.replace(/[\\/:*?"<>|]/g, '_').trim() || 'general';
+}
+
 const {
   Client,
   GatewayIntentBits,
@@ -668,7 +673,10 @@ class DiscordAntigravityBot {
         const output = (stdout || '') + (stderr || '') || (err ? err.message : '(Command executed with no output)');
         const cleanOutput = output.trim();
         if (cleanOutput.length > 1900) {
-          const tempFile = path.join(__dirname, 'temp_downloads', `exec_${Date.now()}.txt`);
+          const channelFolder = sanitizeFolderName(interaction.channel?.name || 'exec');
+          const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+          if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+          const tempFile = path.join(tempDir, `exec_${Date.now()}.txt`);
           fs.writeFileSync(tempFile, cleanOutput, 'utf8');
           await interaction.editReply({
             content: `💻 Perintah: \`${cmd}\`\n📁 \`${session.cwd}\`\nOutput terlalu panjang, dikirim sebagai file:`,
@@ -773,7 +781,8 @@ class DiscordAntigravityBot {
     } else if (commandName === 'screen' || commandName === 'screenshot') {
       await interaction.deferReply();
       try {
-        const tempDir = path.join(__dirname, 'temp_downloads');
+        const channelFolder = sanitizeFolderName(interaction.channel?.name || 'screenshots');
+        const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const filePath = path.join(tempDir, `screen_${Date.now()}.png`);
         await this.systemService.captureScreenshot(filePath);
@@ -864,7 +873,10 @@ class DiscordAntigravityBot {
       await interaction.deferReply();
       const diff = await this.gitService.getDiff(session.cwd);
       if (diff.length > 1900) {
-        const tempFile = path.join(__dirname, 'temp_downloads', `git_diff_${Date.now()}.patch`);
+        const channelFolder = sanitizeFolderName(interaction.channel?.name || 'git');
+        const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        const tempFile = path.join(tempDir, `git_diff_${Date.now()}.patch`);
         fs.writeFileSync(tempFile, diff, 'utf8');
         await interaction.editReply({
           content: '🔍 **Git Diff:** (Perubahan terlalu panjang, dikirim sebagai file patch)',
@@ -1055,7 +1067,10 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         const output = (stdout || '') + (stderr || '') || (err ? err.message : '(No output)');
         const clean = output.trim();
         if (clean.length > 1900) {
-          const tempFile = path.join(__dirname, 'temp_downloads', `exec_${Date.now()}.txt`);
+          const channelFolder = sanitizeFolderName(message.channel?.name || 'exec');
+          const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
+          if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+          const tempFile = path.join(tempDir, `exec_${Date.now()}.txt`);
           fs.writeFileSync(tempFile, clean, 'utf8');
           await message.reply({
             content: `💻 Output \`${terminalCmd}\` dikirim sebagai file:`,
@@ -1083,7 +1098,8 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       }
     } else if (cmd === 'screen' || cmd === 'screenshot') {
       try {
-        const tempDir = path.join(__dirname, 'temp_downloads');
+        const channelFolder = sanitizeFolderName(message.channel?.name || 'screenshots');
+        const tempDir = path.join(__dirname, 'temp_downloads', channelFolder);
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const filePath = path.join(tempDir, `screen_${Date.now()}.png`);
         await this.systemService.captureScreenshot(filePath);
@@ -1236,10 +1252,11 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       return;
     }
 
-    // Handle user attachments from Discord -> save to laptop
+    // Handle user attachments from Discord -> save to laptop per channel folder
     let fullPrompt = message.content;
     if (message.attachments && message.attachments.size > 0) {
-      const downloadDir = path.join(__dirname, 'temp_downloads');
+      const channelFolder = sanitizeFolderName(message.channel?.name || message.channelId || 'general');
+      const downloadDir = path.join(__dirname, 'temp_downloads', channelFolder);
       if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
 
       const downloadedFiles = [];
