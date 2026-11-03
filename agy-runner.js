@@ -111,9 +111,14 @@ ${prompt}`;
       if (onError) onError(err);
     });
 
-    child.on('close', code => {
+    child.on('close', (code, signal) => {
+      // If process was intentionally killed (by /stop or timeout timer), don't trigger raw error
+      if (child.killed) {
+        return;
+      }
       if (code !== 0 && !finalResult) {
-        if (onError) onError(new Error(`Antigravity CLI exited with code ${code}`));
+        const exitReason = code !== null ? `kode ${code}` : (signal ? `sinyal ${signal}` : 'dihentikan paksa');
+        if (onError) onError(new Error(`Antigravity CLI berhenti (${exitReason})`));
       }
     });
 

@@ -1161,6 +1161,15 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     };
 
     const notes = this.notesService.getNotes(session.channelId);
+    const timeoutMinutes = parseInt(process.env.TASK_TIMEOUT_MINUTES || '30', 10);
+    const timeoutTimer = setTimeout(() => {
+      if (session.activeProcess) {
+        session.activeProcess.kill();
+        session.activeProcess = null;
+        clearInterval(typingInterval);
+        statusMsg.edit(`⏱️ **Timeout Auto-Fix:** Task dibatalkan karena melebihi batas waktu ${timeoutMinutes} menit.`).catch(() => {});
+      }
+    }, timeoutMinutes * 60 * 1000);
 
     try {
       session.activeProcess = AgyRunner.runPrompt({
@@ -1182,6 +1191,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
           await updateStatus(`✅ **[Auto-Fix Langkah ${toolCount} Selesai] \`${toolName}\`**`);
         },
         onResult: async (result) => {
+          clearTimeout(timeoutTimer);
           clearInterval(typingInterval);
           session.activeProcess = null;
           session.conversationId = result.conversation_id || session.conversationId;
@@ -1204,12 +1214,14 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
           await this.sendLargeMessage(channel, formatDiscordText(rawResponse), fileAttachments);
         },
         onError: async (err) => {
+          clearTimeout(timeoutTimer);
           clearInterval(typingInterval);
           session.activeProcess = null;
           await statusMsg.edit(`❌ **Error Auto-Fix:** ${err.message}`).catch(() => {});
         }
       });
     } catch (err) {
+      clearTimeout(timeoutTimer);
       clearInterval(typingInterval);
       session.activeProcess = null;
       await statusMsg.edit(`❌ **Gagal:** ${err.message}`).catch(() => {});
@@ -1270,15 +1282,16 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       } catch (_) {}
     };
 
-    // Timeout safety (10 minutes)
+    // Timeout safety (default 30 minutes, configurable via TASK_TIMEOUT_MINUTES in .env)
+    const timeoutMinutes = parseInt(process.env.TASK_TIMEOUT_MINUTES || '30', 10);
     const timeoutTimer = setTimeout(() => {
       if (session.activeProcess) {
         session.activeProcess.kill();
         session.activeProcess = null;
         clearInterval(typingInterval);
-        statusMsg.edit('⏱️ **Timeout:** Task dibatalkan karena melebihi batas waktu 10 menit.').catch(() => {});
+        statusMsg.edit(`⏱️ **Timeout:** Task dibatalkan karena melebihi batas waktu ${timeoutMinutes} menit.`).catch(() => {});
       }
-    }, 10 * 60 * 1000);
+    }, timeoutMinutes * 60 * 1000);
 
     const channelNotes = this.notesService.getNotes(session.channelId);
 
