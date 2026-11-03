@@ -2,7 +2,18 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const AGY_PATH = 'C:\\Users\\Willy\\AppData\\Local\\agy\\bin\\agy.exe';
+function getAgyExecutable() {
+  if (process.env.AGY_PATH && fs.existsSync(process.env.AGY_PATH)) {
+    return process.env.AGY_PATH;
+  }
+  if (process.env.LOCALAPPDATA) {
+    const defaultWinAgy = path.join(process.env.LOCALAPPDATA, 'agy', 'bin', 'agy.exe');
+    if (fs.existsSync(defaultWinAgy)) return defaultWinAgy;
+  }
+  return 'agy';
+}
+
+const AGY_PATH = getAgyExecutable();
 
 class AgyRunner {
   static runPrompt({ prompt, cwd, model, conversationId, notes, onInit, onToolStart, onToolDone, onTextDelta, onResult, onError }) {
@@ -20,7 +31,7 @@ ${notes}
   [ATTACH_FILE: <path_file_di_laptop>]
   Contoh:
   [ATTACH_FILE: ./src/index.js]
-  [ATTACH_FILE: D:\\UB\\laboratorium mgm\\wfc2gether\\wfc2gether\\README.md]
+  [ATTACH_FILE: ./README.md]
   Sistem bridge akan otomatis membaca file tersebut dari laptop dan mengunggahnya ke chat Discord sebagai lampiran (attachment)!
 ]${notesBlock}
 
@@ -40,7 +51,8 @@ ${prompt}`;
       args.push('--conversation', conversationId);
     }
 
-    const workingDir = path.resolve(cwd || 'D:\\UB');
+    const defaultDir = process.env.DEFAULT_DIR || process.cwd();
+    const workingDir = path.resolve(cwd || defaultDir);
     if (!fs.existsSync(workingDir)) {
       throw new Error(`Directory does not exist: ${workingDir}`);
     }

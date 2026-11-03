@@ -7,9 +7,11 @@ class QuotaService {
     this.cachedPort = null;
     this.cachedCsrfToken = null;
     this.cachedCa = null;
-    this.certPath = 'd:/Antigravity IDE/resources/app/extensions/antigravity/dist/languageServer/cert.pem';
-    if (fs.existsSync(this.certPath)) {
-      this.cachedCa = fs.readFileSync(this.certPath);
+    this.certPath = process.env.ANTIGRAVITY_CERT_PATH || null;
+    if (this.certPath && fs.existsSync(this.certPath)) {
+      try {
+        this.cachedCa = fs.readFileSync(this.certPath);
+      } catch (_) {}
     }
   }
 

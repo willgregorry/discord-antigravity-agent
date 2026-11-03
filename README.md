@@ -40,8 +40,8 @@ Sebelum memulai, pastikan komputer/laptop kamu memiliki:
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/username/antigravity-discord-agent.git
-cd antigravity-discord-agent
+git clone https://github.com/willgregorry/discord-antigravity-agent.git
+cd discord-antigravity-agent
 ```
 
 ### 2. Jalankan Setup Wizard

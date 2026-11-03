@@ -185,7 +185,7 @@ class AgentManager {
       let initialDir = (this.config.channel_directories && this.config.channel_directories[channelName.toLowerCase()]) || 
                        (this.config.channel_directories && this.config.channel_directories['general']) || 
                        process.env.DEFAULT_DIR || 
-                       'D:\\UB';
+                       process.cwd();
 
       const session = new ChannelSession(channelId, initialDir, this.config.default_model, this.apiKey);
       this.sessions.set(channelId, session);

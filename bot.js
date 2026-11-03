@@ -138,7 +138,7 @@ class DiscordAntigravityBot {
         }
       }
       if (!mappedDir) {
-        mappedDir = (this.config.channel_directories && this.config.channel_directories['general']) || 'D:\\UB';
+        mappedDir = (this.config.channel_directories && this.config.channel_directories['general']) || process.env.DEFAULT_DIR || process.cwd();
       }
       this.sessions.set(channelId, new ChannelSession(channelId, mappedDir, this.config.default_model));
       this.saveSessions();
@@ -167,7 +167,7 @@ class DiscordAntigravityBot {
       new SlashCommandBuilder()
         .setName('send')
         .setDescription('Kirim file dari laptop kamu ke channel Discord ini')
-        .addStringOption(opt => opt.setName('path').setDescription('Path file di laptop (contoh: ./README.md atau D:\\UB\\...)').setRequired(true)),
+        .addStringOption(opt => opt.setName('path').setDescription('Path file di laptop (contoh: ./README.md atau ./src/index.js)').setRequired(true)),
       new SlashCommandBuilder()
         .setName('clear')
         .setDescription('Mulai sesi percakapan baru di channel ini'),
@@ -1035,7 +1035,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     } else if (cmd === 'cd') {
       const target = args.join(' ');
       if (!target) {
-        await message.reply('Contoh: `!cd D:\\UB\\Compe\\ssh`');
+        await message.reply('Contoh: `!cd ./projects/my-app` atau `!cd C:\\Projects`');
         return;
       }
       try {
