@@ -11,9 +11,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@discordjs/voice": "^0.19.2",
+    "@evan/opus": "^1.0.3",
     "@google/genai": "^2.32.0",
     "discord.js": "^14.28.0",
     "dotenv": "^18.0.9",
-    "localtunnel": "^2.0.2"
+    "ffmpeg-static": "^5.3.0",
+    "localtunnel": "^2.0.2",
+    "msedge-tts": "^2.1.1"
   }
 }

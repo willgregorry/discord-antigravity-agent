@@ -66,6 +66,7 @@ const { SystemService } = require('./system-service');
 const { GitService } = require('./git-service');
 const { NotesService } = require('./notes-service');
 const { WatchdogService } = require('./watchdog-service');
+const { VoiceService } = require('./voice-service');
 
 class ChannelSession {
   constructor(channelId, cwd, model = 'gemini-3.8-flash-medium') {
@@ -99,12 +100,14 @@ class DiscordAntigravityBot {
     this.gitService = new GitService();
     this.notesService = new NotesService(path.join(__dirname, 'notes.json'));
     this.watchdogService = new WatchdogService();
+    this.voiceService = new VoiceService();
 
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates
       ],
       partials: [Partials.Channel, Partials.Message]
     });
@@ -255,7 +258,19 @@ class DiscordAntigravityBot {
             { name: 'Hapus Semua Catatan (Clear)', value: 'clear' }
           )
           .setRequired(false))
-        .addStringOption(opt => opt.setName('text').setDescription('Isi catatan yang ingin ditambahkan (jika pilih add)').setRequired(false))
+        .addStringOption(opt => opt.setName('text').setDescription('Isi catatan yang ingin ditambahkan (jika pilih add)').setRequired(false)),
+
+      // 9. Voice Channel Assistant & Announcer
+      new SlashCommandBuilder()
+        .setName('join-vc')
+        .setDescription('Perintahkan bot untuk bergabung ke Voice Channel tempat kamu berada'),
+      new SlashCommandBuilder()
+        .setName('leave-vc')
+        .setDescription('Keluarkan bot dari Voice Channel'),
+      new SlashCommandBuilder()
+        .setName('say')
+        .setDescription('Ucapkan pesan suara TTS di Voice Channel')
+        .addStringOption(opt => opt.setName('text').setDescription('Teks yang ingin diucapkan bot').setRequired(true))
     ];
 
     const rest = new REST({ version: '10' }).setToken(this.token);
@@ -849,6 +864,35 @@ class DiscordAntigravityBot {
           .setFooter({ text: 'Konteks scratchpad otomatis diikutsertakan dalam prompt Antigravity AI!' });
         await interaction.reply({ embeds: [embed] });
       }
+    } else if (commandName === 'join-vc') {
+      const member = interaction.member;
+      const voiceChannel = member?.voice?.channel;
+      if (!voiceChannel) {
+        await interaction.reply({ content: '❌ Kamu harus berada di dalam sebuah Voice Channel terlebih dahulu agar bot bisa bergabung!', ephemeral: true });
+        return;
+      }
+      try {
+        this.voiceService.join(voiceChannel);
+        await interaction.reply(`🔊 Berhasil bergabung ke Voice Channel **${voiceChannel.name}**!\n> 💡 *Notifikasi tugas selesai, peringatan sistem, dan dev server akan diumumkan lewat suara.*`);
+        this.voiceService.speak(interaction.guildId, `Halo ${member.displayName || 'Willy'}, saya sudah bergabung di voice channel. Sistem voice assistant aktif.`);
+      } catch (err) {
+        await interaction.reply({ content: `❌ Gagal bergabung ke Voice Channel: ${err.message}`, ephemeral: true });
+      }
+    } else if (commandName === 'leave-vc') {
+      const success = this.voiceService.leave(interaction.guildId);
+      if (success) {
+        await interaction.reply('👋 Berhasil keluar dari Voice Channel.');
+      } else {
+        await interaction.reply({ content: 'ℹ️ Bot sedang tidak berada di Voice Channel mana pun pada server ini.', ephemeral: true });
+      }
+    } else if (commandName === 'say') {
+      const text = interaction.options.getString('text');
+      if (!this.voiceService.isConnected(interaction.guildId)) {
+        await interaction.reply({ content: '⚠️ Bot belum bergabung di Voice Channel. Gunakan `/join-vc` terlebih dahulu!', ephemeral: true });
+        return;
+      }
+      this.voiceService.speak(interaction.guildId, text);
+      await interaction.reply(`🗣️ Mengucapkan: *"${text}"* di Voice Channel.`);
     } else if (commandName === 'help') {
       const embed = new EmbedBuilder()
         .setColor(0x2ecc71)
@@ -856,6 +900,7 @@ class DiscordAntigravityBot {
         .setDescription('Kendalikan pengembangan dan laptop kamu sepenuhnya dari HP!')
         .addFields(
           { name: '🤖 Antigravity AI', value: '• Kirim chat biasa untuk prompt AI ngoding\n• Minta kirim file: *"kirimkan file X ke discord"*\n• `/usage` (Cek kuota Gemini & reset time)\n• `/projects` / `/cd <path>` (Pindah workspace)\n• `/model` (Ganti model AI)\n• `/clear` (Reset riwayat chat) • `/stop` (Hentikan proses)' },
+          { name: '🎙️ Voice Channel Assistant', value: '• `/join-vc` (Bot bergabung ke voice channel kamu)\n• `/leave-vc` (Keluarkan bot dari voice channel)\n• `/say <text>` (Ucapkan teks suara natural via TTS)\n• Otomatis menyuarakan tugas selesai & dev server crash!' },
           { name: '🌐 Web Preview & Dev Server', value: '• `/preview <port>` (Buka URL publik live via Cloudflare Tunnel)\n• `/stop-preview` (Tutup tunnel)\n• `/watch-server <command>` (Monitor server dengan 1-Click Auto-Fix crash)\n• `/stop-server` (Hentikan dev server)' },
           { name: '💻 Terminal & Git', value: '• `/exec <command>` (Jalankan perintah PowerShell cepat)\n• `/git` (Menu interaktif Diff, Commit AI, Push, Pull)' },
           { name: '📂 File Manager & Notes', value: '• `/browse` (Jelajahi folder & download file ke HP)\n• `/send <path>` (Kirim file spesifik dari laptop)\n• `/notes` (Scratchpad/memori yang selalu diingat AI)' },
@@ -1146,6 +1191,38 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       session.conversationId = null;
       this.saveSessions();
       await message.reply('🧹 Riwayat di-reset.');
+    } else if (cmd === 'join' || cmd === 'vc') {
+      const voiceChannel = message.member?.voice?.channel;
+      if (!voiceChannel) {
+        await message.reply('❌ Kamu harus berada di dalam Voice Channel terlebih dahulu!');
+        return;
+      }
+      try {
+        this.voiceService.join(voiceChannel);
+        await message.reply(`🔊 Bot bergabung ke Voice Channel **${voiceChannel.name}**!`);
+        this.voiceService.speak(message.guildId, `Halo, saya sudah bergabung di voice channel.`);
+      } catch (e) {
+        await message.reply(`❌ Gagal: ${e.message}`);
+      }
+    } else if (cmd === 'leave') {
+      const ok = this.voiceService.leave(message.guildId);
+      if (ok) {
+        await message.reply('👋 Keluar dari Voice Channel.');
+      } else {
+        await message.reply('ℹ️ Bot tidak berada di Voice Channel.');
+      }
+    } else if (cmd === 'say') {
+      const text = args.join(' ').trim();
+      if (!text) {
+        await message.reply('Contoh: `!say Halo semuanya`');
+        return;
+      }
+      if (!this.voiceService.isConnected(message.guildId)) {
+        await message.reply('⚠️ Bot belum join Voice Channel. Ketik `!join` dulu!');
+        return;
+      }
+      this.voiceService.speak(message.guildId, text);
+      await message.reply(`🗣️ Mengucapkan: *"${text}"* di Voice Channel.`);
     }
   }
 
@@ -1381,12 +1458,22 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
           await statusMsg.edit(`✨ **Selesai!** ${duration} ${turns} • 📁 \`${session.cwd}\``).catch(() => {});
           await this.sendLargeMessage(message.channel, responseText, fileAttachments);
+
+          // Announce in Voice Channel if connected
+          if (message.guildId && this.voiceService.isConnected(message.guildId)) {
+            const chanName = message.channel?.name ? `channel ${message.channel.name}` : 'channel ini';
+            this.voiceService.speak(message.guildId, `Tugas di ${chanName} sudah selesai dikerjakan.`);
+          }
         },
         onError: async (err) => {
           clearTimeout(timeoutTimer);
           clearInterval(typingInterval);
           session.activeProcess = null;
           await statusMsg.edit(`❌ **Error:** ${err.message}`).catch(() => {});
+
+          if (message.guildId && this.voiceService.isConnected(message.guildId)) {
+            this.voiceService.speak(message.guildId, `Perhatian, terjadi kesalahan saat menjalankan tugas.`);
+          }
         }
       });
     } catch (err) {
