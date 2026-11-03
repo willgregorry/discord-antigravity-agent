@@ -112,7 +112,9 @@ Setelah bot online di Discord, kirim pesan di channel atau gunakan slash command
 │       ├── notes-service.js
 │       ├── quota-service.js
 │       ├── system-service.js
+│       ├── tree-service.js
 │       ├── tunnel-service.js
+│       ├── voice-service.js
 │       └── watchdog-service.js
 ├── tests/                    # Pengujian modul
 ├── index.js                  # Entry point aplikasi

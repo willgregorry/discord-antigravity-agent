@@ -67,6 +67,7 @@ const { GitService } = require('./services/git-service');
 const { NotesService } = require('./services/notes-service');
 const { WatchdogService } = require('./services/watchdog-service');
 const { VoiceService } = require('./services/voice-service');
+const { TreeService } = require('./services/tree-service');
 const ROOT_DIR = path.resolve(__dirname, '..');
 
 class ChannelSession {
@@ -261,10 +262,23 @@ class DiscordAntigravityBot {
           .setRequired(false))
         .addStringOption(opt => opt.setName('text').setDescription('Isi catatan yang ingin ditambahkan (jika pilih add)').setRequired(false)),
 
-      // 9. Voice Channel Assistant & Announcer
+      // 9. Directory Tree
+      new SlashCommandBuilder()
+        .setName('tree')
+        .setDescription('Lihat struktur direktori lengkap project aktif saat ini')
+        .addIntegerOption(opt => opt.setName('depth').setDescription('Kedalaman folder (default: 3, maks: 6)').setRequired(false))
+        .addStringOption(opt => opt.setName('path').setDescription('Sub-folder spesifik yang ingin di-inspect (opsional)').setRequired(false)),
+
+      // 10. Voice Channel Assistant & Announcer
+      new SlashCommandBuilder()
+        .setName('join')
+        .setDescription('Perintahkan bot untuk bergabung ke Voice Channel tempat kamu berada'),
       new SlashCommandBuilder()
         .setName('join-vc')
         .setDescription('Perintahkan bot untuk bergabung ke Voice Channel tempat kamu berada'),
+      new SlashCommandBuilder()
+        .setName('leave')
+        .setDescription('Keluarkan bot dari Voice Channel'),
       new SlashCommandBuilder()
         .setName('leave-vc')
         .setDescription('Keluarkan bot dari Voice Channel'),
@@ -276,11 +290,19 @@ class DiscordAntigravityBot {
 
     const rest = new REST({ version: '10' }).setToken(this.token);
     try {
-      console.log('Registering slash commands...');
+      console.log('Registering slash commands (global)...');
       await rest.put(
         Routes.applicationCommands(this.client.user.id),
         { body: commands.map(c => c.toJSON()) }
       );
+      for (const [guildId] of this.client.guilds.cache) {
+        try {
+          await rest.put(
+            Routes.applicationGuildCommands(this.client.user.id, guildId),
+            { body: commands.map(c => c.toJSON()) }
+          );
+        } catch (_) {}
+      }
       console.log('Slash commands registered successfully!');
     } catch (err) {
       console.error('Failed to register slash commands:', err);
@@ -544,6 +566,120 @@ class DiscordAntigravityBot {
     return { embed, components: [row] };
   }
 
+  buildHelpPayload(category = 'help_overview') {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('help_category_select')
+      .setPlaceholder('📂 Pilih Kategori Panduan...')
+      .addOptions([
+        { label: 'Ringkasan Semua Fitur', value: 'help_overview', emoji: '🏠', description: 'Lihat gambaran umum seluruh fitur bot' },
+        { label: 'AI Coding & Workspace', value: 'help_ai', emoji: '🤖', description: 'Prompt AI, kuota, model, dan sesi coding' },
+        { label: 'File & Directory Tree', value: 'help_files', emoji: '🌳', description: 'Lihat struktur folder, browse, & kirim file' },
+        { label: 'Voice Assistant & TTS', value: 'help_voice', emoji: '🎙️', description: 'Voice channel, TTS suara, & notifikasi hands-free' },
+        { label: 'Web Preview & Watchdog', value: 'help_web', emoji: '🌐', description: 'Cloudflare tunnel preview & 1-click AI fix crash' },
+        { label: 'Terminal & Git Manager', value: 'help_terminal', emoji: '💻', description: 'PowerShell exec, diff, commit, push, & pull' },
+        { label: 'Remote Laptop Control', value: 'help_system', emoji: '🔋', description: 'Status hardware, screenshot, sleep, & notes' }
+      ]);
+
+    const row = new ActionRowBuilder().addComponents(select);
+    const embed = new EmbedBuilder().setTimestamp();
+
+    switch (category) {
+      case 'help_ai':
+        embed
+          .setColor(0x3498db)
+          .setTitle('🤖 Panduan: Antigravity AI Coding & Workspace')
+          .setDescription('> Ngoding full-stack langsung dari chat Discord dengan LLM terbaik.')
+          .addFields(
+            { name: '💬 Cara Chat AI', value: '• Kirim chat biasa (tanpa prefix) untuk prompt AI coding.\n• Minta kirim file: *"kirimkan file X ke discord"*.\n• AI otomatis mengeksekusi tools, terminal, dan membaca kode.' },
+            { name: '⚡ Perintah Workspace & Model', value: '• `/usage` — Cek sisa kuota Gemini & reset time realtime\n• `/projects` — Menu dropdown daftar folder favorit project\n• `/cd <path>` — Pindah folder kerja aktif channel ini\n• `/pwd` — Cek direktori aktif dan model yang digunakan\n• `/model` — Ganti model LLM (Gemini 3.8 Flash, Claude Sonnet 4.6, dll)\n• `/clear` — Reset riwayat obrolan / mulai sesi baru\n• `/stop` — Hentikan proses AI yang sedang berjalan' }
+          )
+          .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
+        break;
+
+      case 'help_files':
+        embed
+          .setColor(0x2ecc71)
+          .setTitle('🌳 Panduan: File Manager & Directory Tree')
+          .setDescription('> Pantau dan kelola seluruh file project di laptop secara visual dari HP.')
+          .addFields(
+            { name: '🌳 /tree [depth] [path]', value: '• Tampilkan visualisasi hierarki folder & file project.\n• Otomatis menyembunyikan `node_modules`, `.git`, `bin`, `.next`, `dist`, dll.\n• Parameter `depth` (1-6, default: 3) & `path` (sub-folder opsional).\n• Jika struktur panjang (>1800 char), otomatis dikirim sebagai file lampiran `project-tree.txt`!' },
+            { name: '📂 /browse [path]', value: '• File explorer interaktif dengan dropdown.\n• Masuk ke subfolder atau unduh langsung file project ke HP kamu.' },
+            { name: '📤 /send <path>', value: '• Kirim file spesifik dari laptop kamu ke Discord.\n• Contoh: `/send src/bot.js` atau `/send README.md`' },
+            { name: '📎 Auto Attachment AI', value: '• Jika kamu meminta AI mengirimkan file yang diedit/dibuat, bot otomatis mengunggah file tersebut ke chat.' }
+          )
+          .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
+        break;
+
+      case 'help_voice':
+        embed
+          .setColor(0x9b59b6)
+          .setTitle('🎙️ Panduan: Voice Channel Assistant & TTS')
+          .setDescription('> Asisten suara natural berbasis Microsoft Edge TTS bahasa Indonesia.')
+          .addFields(
+            { name: '🔊 Perintah Voice Channel', value: '• `/join` atau `/join-vc` — Bot bergabung ke Voice Channel kamu\n• `/leave` atau `/leave-vc` — Bot keluar dari Voice Channel\n• `/say <text>` — Ucapkan pesan suara TTS natural di Voice Channel' },
+            { name: '📢 Fitur Hands-Free Otomatis', value: '• **Task Done Notification**: Saat tugas coding AI selesai, bot otomatis mengabarkan lewat suara di VC!\n• **Crash Alert**: Jika server dev crash, bot langsung memberi peringatan suara.\n• **Low Battery Alert**: Peringatan jika baterai laptop menipis.' }
+          )
+          .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
+        break;
+
+      case 'help_web':
+        embed
+          .setColor(0xe67e22)
+          .setTitle('🌐 Panduan: Web Preview & Server Watchdog')
+          .setDescription('> Akses website lokal dari HP & otomatis pantau dev server.')
+          .addFields(
+            { name: '🌐 Web Preview Live (Auto-Tunnel)', value: '• `/preview <port>` — Buka URL publik HTTPS instan via Cloudflare Tunnel (contoh: `/preview 3000`)\n• `/stop-preview` — Tutup tunnel aktif di channel ini' },
+            { name: '🛡️ Server Crash Watchdog', value: '• `/watch-server <command>` — Jalankan dev server (npm run dev, python app.py) dengan pemantau crash realtime\n• **1-Click AI Fix**: Saat crash terdeteksi, bot mengirim error log dan tombol perbaikan otomatis satu klik!\n• `/stop-server` — Matikan dev server yang sedang dipantau' }
+          )
+          .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
+        break;
+
+      case 'help_terminal':
+        embed
+          .setColor(0x1abc9c)
+          .setTitle('💻 Panduan: Terminal PowerShell & Git Manager')
+          .setDescription('> Akses terminal cepat dan manajemen Git tanpa perlu buka laptop.')
+          .addFields(
+            { name: '💻 Terminal Exec', value: '• `/exec <command>` — Jalankan perintah PowerShell cepat di direktori project (contoh: `/exec git status`, `/exec npm test`)\n• Jika output terminal panjang, otomatis dikirim sebagai file text.' },
+            { name: '🐙 Interactive Git Manager', value: '• `/git` — Tampilkan menu tombol Git lengkap:\n  - 📊 **Status**: Cek file modified, staged, untracked\n  - 🔍 **Diff**: Tinjau perubahan kode (file patch jika panjang)\n  - 💾 **Commit**: Form modal popup untuk menulis commit message\n  - 🚀 **Push**: Push commit ke remote GitHub/GitLab\n  - 📥 **Pull**: Tarik update terbaru dari repository remote' }
+          )
+          .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
+        break;
+
+      case 'help_system':
+        embed
+          .setColor(0xe74c3c)
+          .setTitle('🔋 Panduan: Remote Laptop Control & Notes')
+          .setDescription('> Kontrol workstation laptop dan simpan memori penting.')
+          .addFields(
+            { name: '📊 Monitor & Hardware', value: '• `/status` — Cek beban CPU, RAM, disk, sisa baterai, dan uptime laptop\n• `/screen` atau `/screenshot` — Ambil live screenshot monitor laptop' },
+            { name: '🔒 Remote Power & Display', value: '• `/lock` — Kunci workstation Windows (Lock Screen)\n• `/screen-off` — Matikan monitor laptop untuk hemat daya\n• `/sleep` — Masukkan laptop ke Sleep mode\n• `/shutdown` — Matikan laptop secara remote (dengan dialog konfirmasi)' },
+            { name: '📝 Project Notes / Scratchpad', value: '• `/notes` — Lihat catatan channel ini\n• `/notes action:add text:...` — Tambah catatan penting\n• *Catatan scratchpad otomatis diikutsertakan sebagai memori AI!*' }
+          )
+          .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
+        break;
+
+      case 'help_overview':
+      default:
+        embed
+          .setColor(0x5865f2)
+          .setTitle('🛠️ Panduan Antigravity Discord Agent')
+          .setDescription('**Asisten AI Coding & Remote Laptop Control dari Discord HP**\n\nPilih kategori di dropdown menu di bawah untuk melihat rincian perintah:')
+          .addFields(
+            { name: '🤖 AI Coding & Workspace', value: 'Prompt LLM, `/usage`, `/projects`, `/cd`, `/pwd`, `/model`, `/clear`, `/stop`' },
+            { name: '🌳 File & Directory Tree', value: '`/tree` (visual struktur folder), `/browse`, `/send`, kirim file otomatis' },
+            { name: '🎙️ Voice Assistant & TTS', value: '`/join`, `/leave`, `/say`, notifikasi suara hands-free tugas & server' },
+            { name: '🌐 Web Preview & Watchdog', value: '`/preview`, `/stop-preview`, `/watch-server`, 1-Click AI Fix crash' },
+            { name: '💻 Terminal & Git Manager', value: '`/exec`, `/git` (Status, Diff, Commit modal, Push, Pull)' },
+            { name: '🔋 Remote Laptop & Notes', value: '`/status`, `/screen`, `/lock`, `/screen-off`, `/sleep`, `/shutdown`, `/notes`' }
+          )
+          .setFooter({ text: '💡 Tips: Ketik langsung di chat tanpa slash untuk coding dengan AI!' });
+        break;
+    }
+
+    return { embeds: [embed], components: [row] };
+  }
+
   async handleSlashCommand(interaction) {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
     const { commandName } = interaction;
@@ -743,6 +879,9 @@ class DiscordAntigravityBot {
               );
 
               await ch.send({ embeds: [crashEmbed], components: [actionRow] });
+              if (interaction.guildId && this.voiceService.isConnected(interaction.guildId)) {
+                this.voiceService.speak(interaction.guildId, 'Perhatian, dev server mengalami crash!');
+              }
             }
           } catch (e) {
             console.error('Failed to notify crash:', e);
@@ -894,20 +1033,42 @@ class DiscordAntigravityBot {
       }
       this.voiceService.speak(interaction.guildId, text);
       await interaction.reply(`🗣️ Mengucapkan: *"${text}"* di Voice Channel.`);
+    } else if (commandName === 'tree') {
+      const subPath = interaction.options.getString('path');
+      const depth = Math.min(Math.max(interaction.options.getInteger('depth') || 3, 1), 6);
+      const targetDir = subPath ? path.resolve(session.cwd, subPath) : session.cwd;
+
+      if (!fs.existsSync(targetDir)) {
+        await interaction.reply({ content: `❌ Direktori tidak ditemukan: \`${targetDir}\``, ephemeral: true });
+        return;
+      }
+
+      await interaction.deferReply();
+      try {
+        const result = TreeService.generateTree(targetDir, depth);
+        const header = `🌳 **Struktur Project:** \`${path.basename(targetDir) || targetDir}\`\n📁 \`${targetDir}\` *(Depth: ${depth})*\n📊 Total: **${result.stats.totalDirs}** Folder, **${result.stats.totalFiles}** File\n`;
+
+        if (result.treeString.length <= 1800) {
+          await interaction.editReply(`${header}\`\`\`text\n${result.treeString}\n\`\`\``);
+        } else {
+          const channelFolder = sanitizeFolderName(interaction.channel?.name || 'tree');
+          const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
+          if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+          const tempFile = path.join(tempDir, `project-tree_${Date.now()}.txt`);
+          fs.writeFileSync(tempFile, result.treeString, 'utf8');
+
+          const previewSnippet = result.treeString.split('\n').slice(0, 30).join('\n');
+          await interaction.editReply({
+            content: `${header}\`\`\`text\n${previewSnippet}\n... (tersisa ${result.treeString.split('\n').length - 30} baris lagi)\n\`\`\`\n📄 *Struktur lengkap dilampirkan sebagai file di bawah:*\n[ATTACH_FILE: ${tempFile}]`,
+            files: [new AttachmentBuilder(tempFile, { name: 'project-tree.txt' })]
+          });
+        }
+      } catch (err) {
+        await interaction.editReply(`❌ Gagal menghasilkan struktur direktori: ${err.message}`);
+      }
     } else if (commandName === 'help') {
-      const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
-        .setTitle('🛠️ Panduan Lengkap Antigravity Discord Agent')
-        .setDescription('Kendalikan pengembangan dan laptop kamu sepenuhnya dari HP!')
-        .addFields(
-          { name: '🤖 Antigravity AI', value: '• Kirim chat biasa untuk prompt AI ngoding\n• Minta kirim file: *"kirimkan file X ke discord"*\n• `/usage` (Cek kuota Gemini & reset time)\n• `/projects` / `/cd <path>` (Pindah workspace)\n• `/model` (Ganti model AI)\n• `/clear` (Reset riwayat chat) • `/stop` (Hentikan proses)' },
-          { name: '🎙️ Voice Channel Assistant', value: '• `/join-vc` (Bot bergabung ke voice channel kamu)\n• `/leave-vc` (Keluarkan bot dari voice channel)\n• `/say <text>` (Ucapkan teks suara natural via TTS)\n• Otomatis menyuarakan tugas selesai & dev server crash!' },
-          { name: '🌐 Web Preview & Dev Server', value: '• `/preview <port>` (Buka URL publik live via Cloudflare Tunnel)\n• `/stop-preview` (Tutup tunnel)\n• `/watch-server <command>` (Monitor server dengan 1-Click Auto-Fix crash)\n• `/stop-server` (Hentikan dev server)' },
-          { name: '💻 Terminal & Git', value: '• `/exec <command>` (Jalankan perintah PowerShell cepat)\n• `/git` (Menu interaktif Diff, Commit AI, Push, Pull)' },
-          { name: '📂 File Manager & Notes', value: '• `/browse` (Jelajahi folder & download file ke HP)\n• `/send <path>` (Kirim file spesifik dari laptop)\n• `/notes` (Scratchpad/memori yang selalu diingat AI)' },
-          { name: '🔋 Remote Laptop Control', value: '• `/status` (Cek CPU, RAM, Disks, Baterai, Uptime)\n• `/screen` (Live screenshot monitor laptop)\n• `/lock` (Kunci layar)\n• `/screen-off` (Matikan monitor)\n• `/sleep` (Sleep laptop)\n• `/shutdown` (Matikan laptop remote)' }
-        );
-      await interaction.reply({ embeds: [embed] });
+      const payload = this.buildHelpPayload('help_overview');
+      await interaction.reply(payload);
     }
   }
 
@@ -1011,6 +1172,13 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
   async handleSelectMenu(interaction) {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
+
+    if (interaction.customId === 'help_category_select') {
+      const chosenCategory = interaction.values[0];
+      const payload = this.buildHelpPayload(chosenCategory);
+      await interaction.update(payload);
+      return;
+    }
 
     if (interaction.customId === 'select_project') {
       const chosenPath = interaction.values[0];
@@ -1224,6 +1392,38 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       }
       this.voiceService.speak(message.guildId, text);
       await message.reply(`🗣️ Mengucapkan: *"${text}"* di Voice Channel.`);
+    } else if (cmd === 'help') {
+      const payload = this.buildHelpPayload('help_overview');
+      await message.reply(payload);
+    } else if (cmd === 'tree') {
+      const depthArg = args.find(a => /^\d+$/.test(a));
+      const depth = depthArg ? Math.min(Math.max(parseInt(depthArg, 10), 1), 6) : 3;
+      const pathArg = args.filter(a => a !== depthArg).join(' ');
+      const targetDir = pathArg ? path.resolve(session.cwd, pathArg) : session.cwd;
+      if (!fs.existsSync(targetDir)) {
+        await message.reply(`❌ Direktori tidak ditemukan: \`${targetDir}\``);
+        return;
+      }
+      try {
+        const result = TreeService.generateTree(targetDir, depth);
+        const header = `🌳 **Struktur Project:** \`${path.basename(targetDir) || targetDir}\`\n📁 \`${targetDir}\` *(Depth: ${depth})*\n📊 Total: **${result.stats.totalDirs}** Folder, **${result.stats.totalFiles}** File\n`;
+        if (result.treeString.length <= 1800) {
+          await message.reply(`${header}\`\`\`text\n${result.treeString}\n\`\`\``);
+        } else {
+          const channelFolder = sanitizeFolderName(message.channel?.name || 'tree');
+          const tempDir = path.join(ROOT_DIR, 'temp_downloads', channelFolder);
+          if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+          const tempFile = path.join(tempDir, `project-tree_${Date.now()}.txt`);
+          fs.writeFileSync(tempFile, result.treeString, 'utf8');
+          const previewSnippet = result.treeString.split('\n').slice(0, 30).join('\n');
+          await message.reply({
+            content: `${header}\`\`\`text\n${previewSnippet}\n... (tersisa ${result.treeString.split('\n').length - 30} baris lagi)\n\`\`\`\n📄 *Struktur lengkap dilampirkan sebagai file di bawah:*\n[ATTACH_FILE: ${tempFile}]`,
+            files: [new AttachmentBuilder(tempFile, { name: 'project-tree.txt' })]
+          });
+        }
+      } catch (err) {
+        await message.reply(`❌ Gagal: ${err.message}`);
+      }
     }
   }
 
