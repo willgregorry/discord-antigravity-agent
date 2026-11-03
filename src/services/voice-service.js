@@ -12,9 +12,10 @@ const path = require('path');
 
 class VoiceService {
   constructor() {
-    this.connections = new Map(); // guildId -> { connection, player, channelId, queue, isPlaying }
+    this.connections = new Map(); // guildId -> { connection, player, channelId, queue, isPlaying, voice, rate }
     this.tts = new MsEdgeTTS();
-    this.defaultVoice = 'id-ID-ArdiNeural'; // Suara AI Pria Bahasa Indonesia yang natural
+    this.defaultVoice = 'id-ID-GadisNeural'; // Suara Perempuan Indonesia yang ramah, hangat, dan luwes
+    this.defaultRate = '+12%';               // Sedikit dinaikkan agar intonasi tidak monoton/lambat
     this.ttsReady = false;
     this.initTts();
   }
@@ -31,7 +32,6 @@ class VoiceService {
   join(channel) {
     const guildId = channel.guild.id;
 
-    // Jika sudah terhubung di channel yang sama, gunakan yang ada
     if (this.connections.has(guildId)) {
       const current = this.connections.get(guildId);
       if (current.channelId === channel.id) {
@@ -57,7 +57,9 @@ class VoiceService {
       channelId: channel.id,
       guildId,
       queue: [],
-      isPlaying: false
+      isPlaying: false,
+      voice: this.defaultVoice,
+      rate: this.defaultRate
     };
 
     player.on(AudioPlayerStatus.Idle, () => {
@@ -107,6 +109,23 @@ class VoiceService {
     return this.connections.get(guildId)?.channelId || null;
   }
 
+  setVoice(guildId, voiceName, rate = null) {
+    const guildVoice = this.connections.get(guildId);
+    if (guildVoice) {
+      if (voiceName) guildVoice.voice = voiceName;
+      if (rate) guildVoice.rate = rate;
+      return true;
+    }
+    this.defaultVoice = voiceName || this.defaultVoice;
+    if (rate) this.defaultRate = rate;
+    return true;
+  }
+
+  getVoice(guildId) {
+    const guildVoice = this.connections.get(guildId);
+    return guildVoice?.voice || this.defaultVoice;
+  }
+
   async speak(guildId, text, voice = null) {
     const guildVoice = this.connections.get(guildId);
     if (!guildVoice) return false;
@@ -145,14 +164,15 @@ class VoiceService {
     const item = guildVoice.queue.shift();
 
     try {
-      const voiceName = item.voice || this.defaultVoice;
+      const voiceName = item.voice || guildVoice.voice || this.defaultVoice;
+      const rateVal = guildVoice.rate || this.defaultRate;
       await this.tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
       const rootDir = path.resolve(__dirname, '..', '..');
       const voiceTempDir = path.join(rootDir, 'temp_downloads', 'voice');
       if (!fs.existsSync(voiceTempDir)) fs.mkdirSync(voiceTempDir, { recursive: true });
 
-      const res = await this.tts.toFile(voiceTempDir, item.text);
+      const res = await this.tts.toFile(voiceTempDir, item.text, { rate: rateVal, pitch: '+0Hz' });
       if (res && res.audioFilePath) {
         const generatedPath = path.resolve(voiceTempDir, path.basename(res.audioFilePath));
         const uniquePath = path.join(voiceTempDir, `tts_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.mp3`);

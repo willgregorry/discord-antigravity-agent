@@ -875,7 +875,7 @@ class DiscordAntigravityBot {
       try {
         this.voiceService.join(voiceChannel);
         await interaction.reply(`🔊 Berhasil bergabung ke Voice Channel **${voiceChannel.name}**!\n> 💡 *Notifikasi tugas selesai, peringatan sistem, dan dev server akan diumumkan lewat suara.*`);
-        this.voiceService.speak(interaction.guildId, `Halo ${member.displayName || 'Willy'}, saya sudah bergabung di voice channel. Sistem voice assistant aktif.`);
+        this.voiceService.speak(interaction.guildId, `Halo ${member.displayName || 'Willy'}! Aku sudah bergabung di voice channel ya. Nanti kalau ada tugas coding yang selesai atau server error, langsung aku kabarin lewat sini!`);
       } catch (err) {
         await interaction.reply({ content: `❌ Gagal bergabung ke Voice Channel: ${err.message}`, ephemeral: true });
       }
@@ -1463,7 +1463,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
           // Announce in Voice Channel if connected
           if (message.guildId && this.voiceService.isConnected(message.guildId)) {
             const chanName = message.channel?.name ? `channel ${message.channel.name}` : 'channel ini';
-            this.voiceService.speak(message.guildId, `Tugas di ${chanName} sudah selesai dikerjakan.`);
+            this.voiceService.speak(message.guildId, `Tugas di ${chanName} sudah selesai dikerjakan ya!`);
           }
         },
         onError: async (err) => {
