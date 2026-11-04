@@ -1695,6 +1695,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
     const notes = this.notesService.getNotes(session.channelId);
     const timeoutMinutes = parseInt(process.env.TASK_TIMEOUT_MINUTES || '30', 10);
+    const taskStartTime = Date.now();
     const timeoutTimer = setTimeout(() => {
       if (session.activeProcess) {
         session.activeProcess.kill();
@@ -1743,7 +1744,13 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
           }
           rawResponse = rawResponse.replace(/\[ATTACH_FILE:\s*[^\]]+\]/gi, '').trim();
 
-          await statusMsg.edit(`✨ **Perbaikan Selesai!** • 📁 \`${session.cwd}\``).catch(() => {});
+          const elapsedMs = Date.now() - taskStartTime;
+          const elapsedSec = (elapsedMs / 1000).toFixed(1);
+          const durationStr = (elapsedMs / 1000) < 60
+            ? `${elapsedSec}s`
+            : `${Math.floor(elapsedMs / 60000)}m ${Math.round((elapsedMs % 60000) / 1000)}s`;
+
+          await statusMsg.edit(`✨ **Perbaikan Selesai!** ⏱️ ${durationStr} • 📁 \`${session.cwd}\``).catch(() => {});
           await this.sendLargeMessage(channel, formatDiscordText(rawResponse), fileAttachments);
         },
         onError: async (err) => {
@@ -1828,6 +1835,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     }, timeoutMinutes * 60 * 1000);
 
     const channelNotes = this.notesService.getNotes(session.channelId);
+    const taskStartTime = Date.now();
 
     try {
       session.activeProcess = AgyRunner.runPrompt({
@@ -1893,10 +1901,14 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
           rawResponse = rawResponse.replace(/\[ATTACH_FILE:\s*[^\]]+\]/gi, '').trim();
 
           const responseText = formatDiscordText(rawResponse || '*(File terlampir)*');
-          const duration = result.duration_seconds ? `⏱️ ${result.duration_seconds.toFixed(1)}s` : '';
-          const turns = result.num_turns ? `• ${result.num_turns} turns` : '';
+          const elapsedMs = Date.now() - taskStartTime;
+          const elapsedSec = (elapsedMs / 1000).toFixed(1);
+          const durationStr = (elapsedMs / 1000) < 60
+            ? `${elapsedSec}s`
+            : `${Math.floor(elapsedMs / 60000)}m ${Math.round((elapsedMs % 60000) / 1000)}s`;
+          const turns = result.num_turns ? `• ${result.num_turns} turns ` : '';
 
-          await statusMsg.edit(`✨ **Selesai!** ${duration} ${turns} • 📁 \`${session.cwd}\``).catch(() => {});
+          await statusMsg.edit(`✨ **Selesai!** ⏱️ ${durationStr} ${turns}• 📁 \`${session.cwd}\``).catch(() => {});
           await this.sendLargeMessage(message.channel, responseText, fileAttachments);
 
           // Announce in Voice Channel if connected
