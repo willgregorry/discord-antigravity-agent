@@ -20,19 +20,37 @@ class AccountService {
     }
   }
 
-  getLiveTokenPath() {
-    if (process.env.ANTIGRAVITY_TOKEN_PATH && fs.existsSync(process.env.ANTIGRAVITY_TOKEN_PATH)) {
-      return process.env.ANTIGRAVITY_TOKEN_PATH;
+  getLiveTokenPaths() {
+    const paths = [];
+    if (process.env.ANTIGRAVITY_TOKEN_PATH) {
+      paths.push(process.env.ANTIGRAVITY_TOKEN_PATH);
     }
-    const homePath = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'antigravity-oauth-token');
-    if (fs.existsSync(homePath)) return homePath;
+    const roots = [os.homedir(), process.env.USERPROFILE].filter(Boolean);
+    for (const r of roots) {
+      paths.push(path.join(r, '.gemini', 'antigravity', 'antigravity-oauth-token'));
+      paths.push(path.join(r, '.gemini', 'antigravity-cli', 'antigravity-oauth-token'));
+    }
+    return [...new Set(paths)];
+  }
 
-    const userProfile = process.env.USERPROFILE || '';
-    if (userProfile) {
-      const upPath = path.join(userProfile, '.gemini', 'antigravity-cli', 'antigravity-oauth-token');
-      if (fs.existsSync(upPath)) return upPath;
+  getLiveTokenPath() {
+    const all = this.getLiveTokenPaths();
+    for (const p of all) {
+      if (fs.existsSync(p)) return p;
     }
-    return homePath;
+    return all[0] || path.join(os.homedir(), '.gemini', 'antigravity', 'antigravity-oauth-token');
+  }
+
+  writeLiveToken(rawJsonString) {
+    const all = this.getLiveTokenPaths();
+    for (const p of all) {
+      try {
+        const dir = path.dirname(p);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(p, rawJsonString, 'utf8');
+      } catch (_) {}
+    }
+    this.writeCredToWinCred(rawJsonString);
   }
 
   readCredFromWinCred() {
@@ -73,14 +91,15 @@ class AccountService {
     const winCred = this.readCredFromWinCred();
     if (winCred) return winCred;
 
-    // 2. Fallback to file on disk
-    const p = this.getLiveTokenPath();
-    if (fs.existsSync(p)) {
-      try {
-        const raw = fs.readFileSync(p, 'utf8');
-        return JSON.parse(raw);
-      } catch (_) {
-        return null;
+    // 2. Fallback to live token files on disk
+    const paths = this.getLiveTokenPaths();
+    for (const p of paths) {
+      if (fs.existsSync(p)) {
+        try {
+          const raw = fs.readFileSync(p, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') return parsed;
+        } catch (_) {}
       }
     }
     return null;
@@ -196,14 +215,8 @@ class AccountService {
 
     const raw = fs.readFileSync(tokenFilePath, 'utf8');
     
-    // 1. Write to Windows Credential Manager if on Windows
-    this.writeCredToWinCred(raw);
-
-    // 2. Also write to live file path for compatibility
-    const livePath = this.getLiveTokenPath();
-    const liveDir = path.dirname(livePath);
-    if (!fs.existsSync(liveDir)) fs.mkdirSync(liveDir, { recursive: true });
-    fs.writeFileSync(livePath, raw, 'utf8');
+    // Write to ALL live token paths and Windows Credential Manager
+    this.writeLiveToken(raw);
 
     data.activeAccountId = accountId;
     this.saveProfilesData(data);

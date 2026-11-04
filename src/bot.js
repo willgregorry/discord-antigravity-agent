@@ -406,9 +406,11 @@ class DiscordAntigravityBot {
 
   buildUsageEmbed(quotaData) {
     const accData = this.accountService.getAccounts();
+    const liveEmail = accData.liveToken?.email;
     const activeAcc = accData.accounts.find(a => a.id === accData.activeAccountId);
-    const accountEmail = activeAcc ? activeAcc.email : (accData.liveToken?.email || 'Active CLI Account');
-    const activeLabel = activeAcc ? activeAcc.label : 'Default Profile';
+    const accountEmail = liveEmail || activeAcc?.email || 'Active CLI Account';
+    const matchedAcc = accData.accounts.find(a => (a.email || '').toLowerCase() === accountEmail.toLowerCase()) || activeAcc;
+    const activeLabel = matchedAcc ? matchedAcc.label : 'Default Profile';
 
     const cliScreen = this.quotaService.formatCliUsageScreen(quotaData, accountEmail);
 
