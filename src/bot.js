@@ -406,18 +406,33 @@ class DiscordAntigravityBot {
 
   buildUsageEmbed(quotaData) {
     const { quotaSummary, userStatus } = quotaData;
-    const planName = userStatus?.userTier?.name || 'Google AI Pro';
-    const planUpgradeText = userStatus?.userTier?.upgradeSubscriptionText || 'Tersedia kuota model standar untuk tier aktif.';
+    const planName = userStatus?.planStatus?.planInfo?.planName || userStatus?.userTier?.name || 'Google AI Pro';
+    const planUpgradeText = userStatus?.userTier?.upgradeSubscriptionText || 'Tersedia kuota model Gemini Pro aktif.';
+
+    const accData = this.accountService.getAccounts();
+    const activeAcc = accData.accounts.find(a => a.id === accData.activeAccountId);
+    const activeEmail = activeAcc ? `${activeAcc.label} (\`${activeAcc.maskedEmail}\`)` : (accData.liveToken?.maskedEmail ? `\`${accData.liveToken.maskedEmail}\`` : 'Default');
+
+    const ideEmail = userStatus?.email ? this.accountService.maskEmail(userStatus.email) : null;
+
+    const fields = [
+      {
+        name: '👤 Akun Aktif Bot (Untuk Koding)',
+        value: `**${activeEmail}**\n> *Semua tugas koding & prompt AI di Discord menggunakan akun ini.*`,
+        inline: false
+      },
+      {
+        name: '👑 Subscription Plan',
+        value: `**Plan:** \`${planName}\`${ideEmail ? ` • *Sesi IDE: ${ideEmail}*` : ''}\n> *${planUpgradeText}*`,
+        inline: false
+      }
+    ];
 
     const embed = new EmbedBuilder()
       .setColor(0x4285F4)
       .setTitle('📊 Models & Quota Usage')
       .setDescription('Pantau sisa kuota rate limit dan kredit akun Google AI kamu secara realtime.')
-      .addFields({
-        name: '👑 Subscription Plan',
-        value: `**Plan:** \`${planName}\`\n> *${planUpgradeText}*`,
-        inline: false
-      });
+      .addFields(fields);
 
     if (quotaSummary && quotaSummary.groups) {
       for (const group of quotaSummary.groups) {
