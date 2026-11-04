@@ -139,8 +139,19 @@ ${prompt}`;
     });
 
     child.on('close', (code, signal) => {
+      // Pastikan seluruh pohon proses child dan grandchild (seperti MCP npx) dibersihkan
+      if (child.pid) {
+        setTimeout(() => {
+          killProcessTree(child.pid);
+        }, 500);
+      }
+
       // Jika proses sengaja dibatalkan via killTree (/stop atau timeout)
       if (child.killed) {
+        if (!resultDispatched && onError) {
+          resultDispatched = true;
+          onError(new Error('Proses dihentikan oleh pengguna atau timeout.'));
+        }
         return;
       }
 

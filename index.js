@@ -30,7 +30,7 @@ function cleanupOrphanedAgy() {
   try {
     if (process.platform === 'win32') {
       const psCmd = `Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*agy*' -and $_.CommandLine -like '*Instruksi Format Tampilan Discord*' } | Select-Object -ExpandProperty ProcessId`;
-      const out = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8', timeout: 6000 });
+      const out = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8', timeout: 5000 });
       if (out && out.trim()) {
         const pids = out.trim().split(/\r?\n/).map(p => p.trim()).filter(Boolean);
         for (const p of pids) {
@@ -44,8 +44,27 @@ function cleanupOrphanedAgy() {
   } catch (_) {}
 }
 
+// 3. Bersihkan proses MCP background yang tertinggal oleh agy
+function cleanupOrphanedMcp() {
+  try {
+    if (process.platform === 'win32') {
+      const psCmd = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*mcp-remote*' -or $_.CommandLine -like '*google-drive-mcp*' } | Select-Object -ExpandProperty ProcessId`;
+      const out = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8', timeout: 5000 });
+      if (out && out.trim()) {
+        const pids = out.trim().split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+        for (const p of pids) {
+          try {
+            execSync(`taskkill /pid ${p} /T /F`, { stdio: 'ignore' });
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+}
+
 ensureSingleInstance();
 cleanupOrphanedAgy();
+cleanupOrphanedMcp();
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {

@@ -79,6 +79,31 @@ class ChannelSession {
     this.conversationId = null;
     this.activeProcess = null;
     this.currentBrowsePath = null;
+    this.typingInterval = null;
+    this.timeoutTimer = null;
+  }
+
+  clearTimers() {
+    if (this.typingInterval) {
+      clearInterval(this.typingInterval);
+      this.typingInterval = null;
+    }
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+  }
+
+  stopActiveProcess() {
+    this.clearTimers();
+    if (this.activeProcess) {
+      if (typeof this.activeProcess.killTree === 'function') {
+        this.activeProcess.killTree();
+      } else {
+        this.activeProcess.kill();
+      }
+      this.activeProcess = null;
+    }
   }
 
   setCwd(newPath) {
@@ -884,13 +909,8 @@ class DiscordAntigravityBot {
       this.saveSessions();
       await interaction.reply('🧹 Sesi percakapan di channel ini telah di-reset (konteks baru dimulai)!');
     } else if (commandName === 'stop') {
-      if (session.activeProcess) {
-        if (typeof session.activeProcess.killTree === 'function') {
-          session.activeProcess.killTree();
-        } else {
-          session.activeProcess.kill();
-        }
-        session.activeProcess = null;
+      if (session.activeProcess || session.typingInterval) {
+        session.stopActiveProcess();
         await interaction.reply('🛑 Proses Antigravity di channel ini telah dihentikan total.');
       } else {
         await interaction.reply('ℹ️ Tidak ada proses yang sedang berjalan di channel ini.');
@@ -1592,13 +1612,8 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       }
       await message.reply({ files: [new AttachmentBuilder(resolved)] });
     } else if (cmd === 'stop') {
-      if (session.activeProcess) {
-        if (typeof session.activeProcess.killTree === 'function') {
-          session.activeProcess.killTree();
-        } else {
-          session.activeProcess.kill();
-        }
-        session.activeProcess = null;
+      if (session.activeProcess || session.typingInterval) {
+        session.stopActiveProcess();
         await message.reply('🛑 Proses dihentikan total.');
       } else {
         await message.reply('ℹ️ Tidak ada proses aktif.');
@@ -1680,9 +1695,11 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       return;
     }
 
+    session.clearTimers();
     const typingInterval = setInterval(() => {
       channel.sendTyping().catch(() => {});
     }, 4500);
+    session.typingInterval = typingInterval;
     channel.sendTyping().catch(() => {});
 
     let statusMsg = await channel.send({
@@ -1809,9 +1826,11 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     }
 
     // Typing heartbeat
+    session.clearTimers();
     const typingInterval = setInterval(() => {
       message.channel.sendTyping().catch(() => {});
     }, 4500);
+    session.typingInterval = typingInterval;
     message.channel.sendTyping().catch(() => {});
 
     // Send initial status message
