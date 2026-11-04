@@ -405,61 +405,35 @@ class DiscordAntigravityBot {
   }
 
   buildUsageEmbed(quotaData) {
-    const { quotaSummary, userStatus } = quotaData;
-    const planName = userStatus?.planStatus?.planInfo?.planName || userStatus?.userTier?.name || 'Google AI Pro';
-    const planUpgradeText = userStatus?.userTier?.upgradeSubscriptionText || 'Tersedia kuota model Gemini Pro aktif.';
-
     const accData = this.accountService.getAccounts();
     const activeAcc = accData.accounts.find(a => a.id === accData.activeAccountId);
-    const activeEmail = activeAcc ? `${activeAcc.label} (\`${activeAcc.maskedEmail}\`)` : (accData.liveToken?.maskedEmail ? `\`${accData.liveToken.maskedEmail}\`` : 'Default');
+    const accountEmail = activeAcc ? activeAcc.email : (accData.liveToken?.email || 'Active CLI Account');
+    const activeLabel = activeAcc ? activeAcc.label : 'Default Profile';
 
-    const ideEmail = userStatus?.email ? this.accountService.maskEmail(userStatus.email) : null;
-
-    const fields = [
-      {
-        name: '👤 Akun Aktif Bot (Untuk Koding)',
-        value: `**${activeEmail}**\n> *Semua tugas koding & prompt AI di Discord menggunakan akun ini.*`,
-        inline: false
-      },
-      {
-        name: '👑 Subscription Plan',
-        value: `**Plan:** \`${planName}\`${ideEmail ? ` • *Sesi IDE: ${ideEmail}*` : ''}\n> *${planUpgradeText}*`,
-        inline: false
-      }
-    ];
+    const cliScreen = this.quotaService.formatCliUsageScreen(quotaData, accountEmail);
 
     const embed = new EmbedBuilder()
-      .setColor(0x4285F4)
-      .setTitle('📊 Models & Quota Usage')
-      .setDescription('Pantau sisa kuota rate limit dan kredit akun Google AI kamu secara realtime.')
-      .addFields(fields);
-
-    if (quotaSummary && quotaSummary.groups) {
-      for (const group of quotaSummary.groups) {
-        const lines = [];
-        for (const bucket of group.buckets || []) {
-          const bar = renderProgressBar(bucket.remainingFraction ?? 1);
-          const resetStr = formatRelativeTime(bucket.resetTime);
-          lines.push(`• **${bucket.displayName}**\n  ${bar}${resetStr ? `\n  ↳ *Reset: ${resetStr}*` : ''}`);
-        }
-        embed.addFields({
-          name: `${group.displayName.includes('Gemini') ? '✨' : '🧠'} ${group.displayName}`,
-          value: lines.length > 0 ? lines.join('\n\n') : '*(Tidak ada informasi kuota)*',
-          inline: false
-        });
-      }
-    } else {
-      embed.addFields({
-        name: 'ℹ️ Informasi Quota',
-        value: 'Tidak ada detail kuota yang dikembalikan oleh Language Server.',
-        inline: false
-      });
-    }
-
-    embed.setFooter({ text: 'Antigravity IDE • Google AI Pro • Live Language Server' })
-      .setTimestamp(new Date());
+      .setColor(0x00D26A)
+      .setTitle('⚡ Antigravity CLI — Models & Quota')
+      .setDescription(cliScreen)
+      .setFooter({ text: `Profil: ${activeLabel} • Sumber: ${quotaData?.source === 'cli' ? 'Direct agy CLI' : 'Language Server'} • ${new Date().toLocaleTimeString('id-ID')}` });
 
     return embed;
+  }
+
+  buildUsagePayload(quotaData) {
+    const embed = this.buildUsageEmbed(quotaData);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('btn_usage_refresh')
+        .setLabel('🔄 Refresh Quota')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('btn_usage_switch_acc')
+        .setLabel('👤 Kelola Akun')
+        .setStyle(ButtonStyle.Secondary)
+    );
+    return { embeds: [embed], components: [row] };
   }
 
   async buildGitEmbed(cwd) {
@@ -1195,7 +1169,21 @@ class DiscordAntigravityBot {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
     const customId = interaction.customId;
 
-    if (customId === 'btn_save_current_acc') {
+    if (customId === 'btn_usage_refresh') {
+      await interaction.deferUpdate();
+      try {
+        const data = await this.quotaService.fetchQuotaAndStatus(true);
+        const payload = this.buildUsagePayload(data);
+        await interaction.editReply(payload);
+      } catch (err) {
+        await interaction.followUp({ content: `❌ Gagal me-refresh usage: ${err.message}`, ephemeral: true });
+      }
+      return;
+    } else if (customId === 'btn_usage_switch_acc') {
+      const payload = this.buildAccountsPayload();
+      await interaction.reply({ ...payload, ephemeral: true });
+      return;
+    } else if (customId === 'btn_save_current_acc') {
       const modal = new ModalBuilder()
         .setCustomId('modal_save_current_acc')
         .setTitle('Simpan Akun Saat Ini');
@@ -1390,6 +1378,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       const accId = interaction.values[0];
       try {
         const switched = this.accountService.switchAccount(accId);
+        this.quotaService.clearCache();
         const payload = this.buildAccountsPayload();
         await interaction.update({
           content: `🔄 **Berhasil Beralih Akun!** Sekarang Antigravity aktif menggunakan **${switched.label}** (\`${switched.maskedEmail}\`). Sesi koding kamu tetap aman!`,
