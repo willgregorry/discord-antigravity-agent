@@ -68,6 +68,7 @@ const { NotesService } = require('./services/notes-service');
 const { WatchdogService } = require('./services/watchdog-service');
 const { VoiceService } = require('./services/voice-service');
 const { TreeService } = require('./services/tree-service');
+const { AccountService } = require('./services/account-service');
 const ROOT_DIR = path.resolve(__dirname, '..');
 
 class ChannelSession {
@@ -103,6 +104,7 @@ class DiscordAntigravityBot {
     this.notesService = new NotesService(path.join(ROOT_DIR, 'notes.json'));
     this.watchdogService = new WatchdogService();
     this.voiceService = new VoiceService();
+    this.accountService = new AccountService(ROOT_DIR);
 
     this.client = new Client({
       intents: [
@@ -263,6 +265,14 @@ class DiscordAntigravityBot {
         .addStringOption(opt => opt.setName('text').setDescription('Isi catatan yang ingin ditambahkan (jika pilih add)').setRequired(false)),
 
       // 9. Directory Tree
+      // Multi-Account Gemini Pro
+      new SlashCommandBuilder()
+        .setName('account')
+        .setDescription('Kelola dan alihkan multi-akun Gemini Pro langsung dari Discord'),
+      new SlashCommandBuilder()
+        .setName('accounts')
+        .setDescription('Kelola dan alihkan multi-akun Gemini Pro langsung dari Discord'),
+
       new SlashCommandBuilder()
         .setName('tree')
         .setDescription('Lihat struktur direktori lengkap project aktif saat ini')
@@ -566,6 +576,100 @@ class DiscordAntigravityBot {
     return { embed, components: [row] };
   }
 
+  buildAccountsPayload() {
+    const data = this.accountService.getAccounts();
+    const embed = new EmbedBuilder()
+      .setColor(0x4285F4)
+      .setTitle('👑 Multi-Account Gemini Pro Manager')
+      .setDescription('Kelola dan alihkan akun Google Gemini Pro kamu langsung dari HP tanpa repot buka laptop!')
+      .setTimestamp();
+
+    let activeAccount = null;
+    if (data.activeAccountId) {
+      activeAccount = data.accounts.find(a => a.id === data.activeAccountId);
+    }
+
+    const currentEmail = data.liveToken?.maskedEmail || '(Belum terdeteksi)';
+    const activeLabel = activeAccount ? activeAccount.label : 'Akun Aktif di Laptop';
+
+    embed.addFields({
+      name: '🟢 Akun yang Sedang Digunakan Saat Ini',
+      value: `• **Label:** \`${activeLabel}\`\n• **Email:** \`${currentEmail}\`\n• **Status:** \`Siap Koding (Active)\``,
+      inline: false
+    });
+
+    if (data.accounts.length === 0) {
+      embed.addFields({
+        name: '📋 Daftar Profil Tersimpan',
+        value: '*(Belum ada profil akun yang disimpan)*\n\nKlik tombol **💾 Simpan Akun Sekarang** di bawah untuk menyimpan akun aktif di laptopmu sebagai profil pertama!',
+        inline: false
+      });
+    } else {
+      const listText = data.accounts.map((acc, idx) => {
+        const isActive = acc.id === data.activeAccountId;
+        const badge = isActive ? '🟢 **[AKTIF]**' : '⚪';
+        return `${idx + 1}. ${badge} **${acc.label}** (\`${acc.maskedEmail}\`)`;
+      }).join('\n');
+
+      embed.addFields({
+        name: `📋 Daftar Profil Akun (${data.accounts.length})`,
+        value: listText,
+        inline: false
+      });
+    }
+
+    embed.setFooter({ text: 'Konteks chat koding AI TIDAK akan hilang saat beralih akun!' });
+
+    const components = [];
+
+    // Dropdown switcher (if there are accounts)
+    if (data.accounts.length > 0) {
+      const selectOptions = data.accounts.map(acc => ({
+        label: acc.label.slice(0, 50),
+        value: acc.id,
+        description: acc.maskedEmail,
+        emoji: acc.id === data.activeAccountId ? '🟢' : '👤',
+        default: acc.id === data.activeAccountId
+      }));
+
+      const selectRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('select_switch_account')
+          .setPlaceholder('🔄 Pilih Akun untuk Diaktifkan Sekarang...')
+          .addOptions(selectOptions)
+      );
+      components.push(selectRow);
+    }
+
+    // Action buttons
+    const btnRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('btn_save_current_acc')
+        .setLabel('💾 Simpan Akun Sekarang')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('btn_add_token_manual')
+        .setLabel('➕ Input Token Manual')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('btn_acc_guide')
+        .setLabel('📖 Panduan Login')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    if (data.accounts.length > 0) {
+      btnRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId('btn_delete_acc_prompt')
+          .setLabel('🗑️ Hapus Profil')
+          .setStyle(ButtonStyle.Danger)
+      );
+    }
+
+    components.push(btnRow);
+    return { embeds: [embed], components };
+  }
+
   buildHelpPayload(category = 'help_overview') {
     const select = new StringSelectMenuBuilder()
       .setCustomId('help_category_select')
@@ -591,7 +695,7 @@ class DiscordAntigravityBot {
           .setDescription('> Ngoding full-stack langsung dari chat Discord dengan LLM terbaik.')
           .addFields(
             { name: '💬 Cara Chat AI', value: '• Kirim chat biasa (tanpa prefix) untuk prompt AI coding.\n• Minta kirim file: *"kirimkan file X ke discord"*.\n• AI otomatis mengeksekusi tools, terminal, dan membaca kode.' },
-            { name: '⚡ Perintah Workspace & Model', value: '• `/usage` — Cek sisa kuota Gemini & reset time realtime\n• `/projects` — Menu dropdown daftar folder favorit project\n• `/cd <path>` — Pindah folder kerja aktif channel ini\n• `/pwd` — Cek direktori aktif dan model yang digunakan\n• `/model` — Ganti model LLM (Gemini 3.8 Flash, Claude Sonnet 4.6, dll)\n• `/clear` — Reset riwayat obrolan / mulai sesi baru\n• `/stop` — Hentikan proses AI yang sedang berjalan' }
+            { name: '⚡ Perintah Workspace & Model', value: '• `/usage` — Cek sisa kuota Gemini & reset time realtime\n• `/projects` — Menu dropdown daftar folder favorit project\n• `/cd <path>` — Pindah folder kerja aktif channel ini\n• `/pwd` — Cek direktori aktif dan model yang digunakan\n• `/model` — Ganti model LLM (Gemini 3.8 Flash, Claude Sonnet 4.6, dll)\n• `/account` — Kelola & ganti multi-akun Gemini Pro instan dari HP\n• `/clear` — Reset riwayat obrolan / mulai sesi baru\n• `/stop` — Hentikan proses AI yang sedang berjalan' }
           )
           .setFooter({ text: 'Gunakan dropdown di bawah untuk beralih kategori' });
         break;
@@ -666,7 +770,7 @@ class DiscordAntigravityBot {
           .setTitle('🛠️ Panduan Antigravity Discord Agent')
           .setDescription('**Asisten AI Coding & Remote Laptop Control dari Discord HP**\n\nPilih kategori di dropdown menu di bawah untuk melihat rincian perintah:')
           .addFields(
-            { name: '🤖 AI Coding & Workspace', value: 'Prompt LLM, `/usage`, `/projects`, `/cd`, `/pwd`, `/model`, `/clear`, `/stop`' },
+            { name: '🤖 AI Coding & Workspace', value: 'Prompt LLM, `/account`, `/usage`, `/projects`, `/cd`, `/pwd`, `/model`, `/clear`, `/stop`' },
             { name: '🌳 File & Directory Tree', value: '`/tree` (visual struktur folder), `/browse`, `/send`, kirim file otomatis' },
             { name: '🎙️ Voice Assistant & TTS', value: '`/join`, `/leave`, `/say`, notifikasi suara hands-free tugas & server' },
             { name: '🌐 Web Preview & Watchdog', value: '`/preview`, `/stop-preview`, `/watch-server`, 1-Click AI Fix crash' },
@@ -683,6 +787,12 @@ class DiscordAntigravityBot {
   async handleSlashCommand(interaction) {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
     const { commandName } = interaction;
+
+    if (commandName === 'account' || commandName === 'accounts') {
+      const payload = this.buildAccountsPayload();
+      await interaction.reply(payload);
+      return;
+    }
 
     if (commandName === 'usage') {
       await interaction.deferReply();
@@ -1076,6 +1186,69 @@ class DiscordAntigravityBot {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
     const customId = interaction.customId;
 
+    if (customId === 'btn_save_current_acc') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_save_current_acc')
+        .setTitle('Simpan Akun Saat Ini');
+      const labelInput = new TextInputBuilder()
+        .setCustomId('account_label')
+        .setLabel('Label / Nama Profil Akun')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Contoh: Akun Utama (Pro), Akun Kantor')
+        .setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(labelInput));
+      await interaction.showModal(modal);
+      return;
+    } else if (customId === 'btn_add_token_manual') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_add_token_manual')
+        .setTitle('Input Token Manual');
+      const labelInput = new TextInputBuilder()
+        .setCustomId('token_label')
+        .setLabel('Label / Nama Akun')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Contoh: Akun Cadangan Pro')
+        .setRequired(true);
+      const jsonInput = new TextInputBuilder()
+        .setCustomId('token_json')
+        .setLabel('Isi JSON Token (antigravity-oauth-token)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Paste seluruh string JSON token di sini...')
+        .setRequired(true);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(labelInput),
+        new ActionRowBuilder().addComponents(jsonInput)
+      );
+      await interaction.showModal(modal);
+      return;
+    } else if (customId === 'btn_acc_guide') {
+      await interaction.reply({
+        content: `📖 **Panduan Menambah Akun Google / Gemini Pro Baru:**\n\n1. Klik tombol **💾 Simpan Akun Sekarang** di Discord untuk mengamankan akun aktifmu saat ini.\n2. Buka terminal laptop kamu dan jalankan:\n\`\`\`powershell\nRemove-Item \"$env:USERPROFILE\\.gemini\\antigravity-cli\\antigravity-oauth-token\" -Force\n\`\`\`\n3. Ketik \`agy\` di terminal laptop ➡️ Browser login Google akan terbuka otomatis ➡️ Login dengan akun Gemini Pro kedua kamu.\n4. Kembali ke Discord, ketik \`/account\` lalu klik **💾 Simpan Akun Sekarang** (beri nama: *Akun Cadangan*).\n5. Selesai! Kamu sekarang punya 2 akun dan bisa beralih instan kapan pun hanya dengan 1-klik di Discord!`,
+        ephemeral: true
+      });
+      return;
+    } else if (customId === 'btn_delete_acc_prompt') {
+      const data = this.accountService.getAccounts();
+      if (data.accounts.length === 0) {
+        await interaction.reply({ content: 'ℹ️ Tidak ada profil akun yang tersimpan.', ephemeral: true });
+        return;
+      }
+      const deleteOptions = data.accounts.map(acc => ({
+        label: `Hapus: ${acc.label}`.slice(0, 50),
+        value: acc.id,
+        description: acc.maskedEmail,
+        emoji: '🗑️'
+      }));
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('select_delete_account')
+          .setPlaceholder('Pilih akun yang ingin dihapus...')
+          .addOptions(deleteOptions)
+      );
+      await interaction.reply({ content: '🗑️ **Pilih profil akun yang ingin kamu hapus:**', components: [row], ephemeral: true });
+      return;
+    }
+
     if (customId === 'git_diff') {
       await interaction.deferReply();
       const diff = await this.gitService.getDiff(session.cwd);
@@ -1158,6 +1331,37 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
   async handleModalSubmit(interaction) {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
+    if (interaction.customId === 'modal_save_current_acc') {
+      const label = interaction.fields.getTextInputValue('account_label');
+      try {
+        const saved = this.accountService.saveCurrentLiveAccount(label);
+        const payload = this.buildAccountsPayload();
+        await interaction.update({
+          content: `🎉 **Akun Berhasil Disimpan!** Profil **${saved.label}** (\`${this.accountService.maskEmail(saved.email)}\`) siap dipakai kapan saja.`,
+          embeds: payload.embeds,
+          components: payload.components
+        });
+      } catch (err) {
+        await interaction.reply({ content: `❌ Gagal menyimpan akun: ${err.message}`, ephemeral: true });
+      }
+      return;
+    } else if (interaction.customId === 'modal_add_token_manual') {
+      const label = interaction.fields.getTextInputValue('token_label');
+      const json = interaction.fields.getTextInputValue('token_json');
+      try {
+        const saved = this.accountService.saveDirectToken(label, json);
+        const payload = this.buildAccountsPayload();
+        await interaction.update({
+          content: `🎉 **Token Berhasil Disimpan!** Profil **${saved.label}** (\`${this.accountService.maskEmail(saved.email)}\`) ditambahkan ke daftar.`,
+          embeds: payload.embeds,
+          components: payload.components
+        });
+      } catch (err) {
+        await interaction.reply({ content: `❌ Gagal menyimpan token: ${err.message}`, ephemeral: true });
+      }
+      return;
+    }
+
     if (interaction.customId === 'git_commit_modal') {
       const commitMsg = interaction.fields.getTextInputValue('commit_message');
       await interaction.deferReply();
@@ -1172,6 +1376,35 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
   async handleSelectMenu(interaction) {
     const session = this.getOrCreateSession(interaction.channelId, interaction.channel?.name || '');
+
+    if (interaction.customId === 'select_switch_account') {
+      const accId = interaction.values[0];
+      try {
+        const switched = this.accountService.switchAccount(accId);
+        const payload = this.buildAccountsPayload();
+        await interaction.update({
+          content: `🔄 **Berhasil Beralih Akun!** Sekarang Antigravity aktif menggunakan **${switched.label}** (\`${switched.maskedEmail}\`). Sesi koding kamu tetap aman!`,
+          embeds: payload.embeds,
+          components: payload.components
+        });
+      } catch (err) {
+        await interaction.reply({ content: `❌ Gagal beralih akun: ${err.message}`, ephemeral: true });
+      }
+      return;
+    } else if (interaction.customId === 'select_delete_account') {
+      const accId = interaction.values[0];
+      try {
+        const removed = this.accountService.deleteAccount(accId);
+        const payload = this.buildAccountsPayload();
+        await interaction.update({
+          content: `🗑️ **Profil Dihapus:** Profil **${removed.label}** (\`${removed.maskedEmail}\`) telah dihapus.`,
+          components: []
+        });
+      } catch (err) {
+        await interaction.reply({ content: `❌ Gagal menghapus akun: ${err.message}`, ephemeral: true });
+      }
+      return;
+    }
 
     if (interaction.customId === 'help_category_select') {
       const chosenCategory = interaction.values[0];
@@ -1247,6 +1480,12 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     const args = message.content.slice(1).trim().split(/\s+/);
     const cmd = args.shift().toLowerCase();
     const session = this.getOrCreateSession(message.channelId, message.channel?.name || '');
+
+    if (cmd === 'account' || cmd === 'accounts') {
+      const payload = this.buildAccountsPayload();
+      await message.reply(payload);
+      return;
+    }
 
     if (cmd === 'usage' || cmd === 'kuota') {
       try {
