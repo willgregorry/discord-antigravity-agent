@@ -1,54 +1,74 @@
-# 🤖 Antigravity Discord Agent
+<p align="center">
+  <img src="assets/banner.png" alt="Antigravity Discord Agent" width="100%" style="border-radius: 8px;">
+</p>
 
-> **Bridge bot Discord untuk Google Antigravity CLI di komputer lokal.**  
-> Kontrol coding agent, jalankan eksekusi tugas, navigasi proyek, dan kelola berkas langsung dari Discord (termasuk dari smartphone kamu).
+<p align="center">
+  <strong>Bridge bot Discord untuk Google Antigravity CLI di komputer lokal.</strong><br>
+  Kendalikan coding agent, eksekusi tugas, inspeksi proyek, dan pantau sistem langsung dari chat Discord.
+</p>
 
----
-
-## ✨ Fitur Utama
-
-- 💬 **Kontrol Antigravity Jarak Jauh**: Chatting dengan Antigravity coding agent langsung via Discord thread/channel.
-- 📂 **Channel-to-Directory Mapping**: Otomatis mengarahkan sesi kerja ke folder proyek lokal sesuai nama channel (misal: channel `#devsecops` otomatis membuka folder mata kuliah/proyek DevSecOps).
-- 📎 **Two-Way File Attachment**:
-  - Kirim file/dokumen di Discord ➡️ otomatis disimpan di folder kerja lokal laptop.
-  - Minta agen kirim file ➡️ agen menyertakan tag `[ATTACH_FILE: <path>]` dan bot otomatis mengunggahnya ke Discord sebagai attachment.
-- 🧠 **Session Continuity**: Menyimpan `conversationId` per channel sehingga konteks percakapan tidak hilang.
-- 🛡️ **Whitelist Keamanan**: Opsi `ALLOWED_USER_IDS` untuk memastikan hanya pemilik laptop yang dapat memberikan perintah ke agent.
-- ⚙️ **Model Switcher**: Pilihan model AI yang fleksibel (Gemini Flash, Sonnet, Opus, dll).
-- 📊 **Monitoring & Watchdog**: Dilengkapi pemantau resource, kuota token, git status, dan tunnel monitoring.
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%3E%3D18.0.0-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node Version">
+  <img src="https://img.shields.io/badge/discord.js-v14-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord.js">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/license-ISC-blue?style=flat-square" alt="License">
+</p>
 
 ---
 
-## 📋 Prasyarat
+## Fitur Utama
 
-Sebelum memulai, pastikan komputer/laptop kamu memiliki:
-
-1. **Node.js** versi 18 atau lebih baru ([Download Node.js](https://nodejs.org/)).
-2. **Google Antigravity CLI (`agy`)** sudah terinstal dan dapat dijalankan via terminal.
-3. **Bot Discord**:
-   - Buat aplikasi baru di [Discord Developer Portal](https://discord.com/developers/applications).
-   - Buat **Bot** dan simpan **Bot Token**.
-   - Di tab **Bot** ➡️ **Privileged Gateway Intents**, aktifkan:
-     - ✅ **Presence Intent**
-     - ✅ **Server Members Intent**
-     - ✅ **Message Content Intent**
-   - Invite bot ke server Discord kamu melalui menu **OAuth2 URL Generator** dengan izin `bot` & `applications.commands` (Administrator atau izin Send Messages, Attach Files, Embed Links).
+- **Kontrol AI Jarak Jauh**: Chat langsung dengan Antigravity CLI agent via channel atau thread Discord tanpa perlu membuka laptop.
+- **Channel-to-Directory Mapping**: Otomatis memetakan nama channel Discord ke folder kerja proyek tertentu di laptop (contoh: `#web-app` otomatis membuka direktori proyek web).
+- **Two-Way File Attachment**:
+  - Kirim berkas di Discord dan bot otomatis menyimpannya ke folder kerja lokal laptop.
+  - Minta AI mengirim berkas, lalu bot otomatis mengunggah dokumen/hasil kodingan sebagai lampiran Discord.
+- **Directory Tree Viewer (`/tree`)**: Visualisasi hierarki direktori proyek secara instan dengan filter otomatis folder bising (`node_modules`, `.git`, `.next`, `dist`, lockfiles).
+- **Voice Channel Assistant (`/join`, `/say`)**: Notifikasi suara hands-free berbasis TTS bahasa Indonesia saat tugas selesai atau saat server crash.
+- **Web Preview Tunnel (`/preview`)**: Buka akses publik instan via Cloudflare Tunnel untuk menguji aplikasi web lokal dari smartphone.
+- **Server Crash Watchdog (`/watch-server`)**: Memantau dev server secara real-time dan menyediakan tombol 1-Click AI Fix untuk diagnosis bug otomatis.
+- **Interactive Git & Terminal**: Akses perintah PowerShell cepat (`/exec`) serta kontrol Git terpadu (`/git` status, diff, commit, push, pull).
+- **Remote Workstation Control**: Pantau performa hardware laptop (`/status`), ambil tangkapan layar live (`/screen`), serta kontrol daya (`/lock`, `/sleep`, `/shutdown`).
 
 ---
 
-## 🚀 Panduan Instalasi Cepat
+## Prasyarat
+
+Sebelum memulai instalasi, pastikan sistem kamu memenuhi kebutuhan berikut:
+
+1. **Node.js** versi 18 atau lebih baru ([Unduh Node.js](https://nodejs.org/)).
+2. **Google Antigravity CLI (`agy`)** sudah terpasang dan dapat dijalankan dari terminal.
+3. **Akun & Aplikasi Discord**:
+   - Buat aplikasi baru melalui [Discord Developer Portal](https://discord.com/developers/applications).
+   - Di menu **Bot**, salin dan simpan **Bot Token**.
+   - Di menu **OAuth2** > **URL Generator**, pilih scope `bot` dan `applications.commands` dengan izin pesan, berkas, dan embed.
+
+> **Penting (Privileged Gateway Intents):**  
+> Pada tab **Bot** di Discord Developer Portal, pastikan ketiga izin berikut diaktifkan:
+> - `Presence Intent`
+> - `Server Members Intent`
+> - `Message Content Intent` (Wajib aktif agar bot dapat membaca perintah obrolan)
+
+---
+
+## Panduan Instalasi
 
 ### 1. Clone Repository
+
 ```bash
 git clone https://github.com/willgregorry/discord-antigravity-agent.git
 cd discord-antigravity-agent
 ```
 
 ### 2. Jalankan Setup Wizard
+
 Jalankan wizard otomatis untuk menginstal dependensi dan mengonfigurasi kredensial:
 
-**Di Windows (1-Klik):**
-> Cukup double-click file `scripts/setup.bat`
+**Di Windows:**
+Cukup jalankan file batch:
+```cmd
+scripts\setup.bat
+```
 
 **Atau via Terminal:**
 ```bash
@@ -56,20 +76,21 @@ npm install
 npm run setup
 ```
 
-Wizard interaktif akan menanyakan:
-- **Discord Bot Token**
-- **Discord User ID** (Opsional, untuk membatasi kontrol hanya ke akun Discord kamu)
-- **Direktori kerja default**
+Wizard akan memandu pengisian:
+- `DISCORD_BOT_TOKEN`: Token bot Discord kamu.
+- `ALLOWED_USER_IDS`: Discord User ID kamu (opsional, membatasi agar hanya kamu yang dapat memberi perintah).
+- `DEFAULT_DIR`: Direktori kerja utama di laptop kamu.
 
-### 3. Konfigurasi Channel (`config.json`)
-Buka berkas `config.json` untuk memetakan nama channel Discord ke folder proyek di laptop kamu:
+### 3. Pemetaan Direktori (`config.json`)
+
+Sesuaikan file `config.json` untuk menghubungkan nama channel Discord ke folder proyek lokal:
 
 ```json
 {
   "default_model": "gemini-3.8-flash-medium",
   "channel_directories": {
     "general": "C:\\Users\\Username\\Projects",
-    "project-web": "C:\\Users\\Username\\Projects\\web-app",
+    "web-app": "C:\\Users\\Username\\Projects\\web-app",
     "skripsi": "D:\\Kuliah\\Skripsi"
   }
 }
@@ -77,37 +98,65 @@ Buka berkas `config.json` untuk memetakan nama channel Discord ke folder proyek 
 
 ---
 
-## ▶️ Menjalankan Bot
+## Menjalankan Bot
 
-Jalankan perintah berikut:
+Gunakan salah satu metode berikut:
+
 ```bash
 npm start
 ```
-*Di Windows, kamu juga bisa langsung double-click `scripts/start.bat`.*
 
-Setelah bot online di Discord, kirim pesan di channel atau gunakan slash command seperti:
-- `/cwd` - Cek direktori kerja saat ini
-- `/model` - Ganti model AI untuk channel tersebut
-- `/notes` - Catatan cepat per sesi
+*Di Windows, kamu juga dapat langsung menjalankan `scripts/start.bat` atau menggunakan `scripts/start-hidden.vbs` agar berjalan tanpa jendela terminal terbuka di latar belakang.*
 
 ---
 
-## 📁 Struktur Direktori Proyek
+## Daftar Perintah
+
+Gunakan perintah `/help` di Discord untuk melihat panduan interaktif lengkap dengan navigasi dropdown. Berikut ringkasan perintah yang tersedia:
+
+| Perintah | Deskripsi |
+| :--- | :--- |
+| `/help` | Menampilkan panduan interaktif terstruktur per kategori |
+| `/tree` | Menampilkan struktur hierarki folder proyek aktif |
+| `/usage` | Cek kuota model Gemini dan waktu reset realtime |
+| `/pwd` | Tampilkan direktori kerja dan model AI aktif di channel ini |
+| `/cd <path>` | Pindah direktori kerja sesi aktif channel ini |
+| `/projects` | Pilih direktori kerja dari menu pilihan favorit |
+| `/model` | Ganti model AI yang digunakan (Gemini Flash, Claude Sonnet, dll) |
+| `/browse` | File explorer interaktif untuk mengunduh berkas proyek ke HP |
+| `/send <path>` | Mengirim berkas dari komputer lokal ke channel Discord |
+| `/preview <port>` | Membuka URL publik live via Cloudflare Tunnel |
+| `/watch-server <cmd>` | Menjalankan dev server dengan proteksi pemantau crash |
+| `/exec <cmd>` | Menjalankan perintah PowerShell di folder kerja |
+| `/git` | Menu interaktif kontrol Git (Status, Diff, Commit, Push, Pull) |
+| `/status` | Cek status CPU, RAM, disk, baterai, dan uptime laptop |
+| `/screen` | Mengambil tangkapan layar live monitor laptop |
+| `/join` / `/leave` | Kontrol asisten suara di Discord Voice Channel |
+| `/say <text>` | Ucapkan teks menggunakan TTS natural di Voice Channel |
+| `/clear` | Reset riwayat percakapan sesi channel ini |
+| `/stop` | Batalkan proses AI atau perintah terminal yang sedang berjalan |
+
+---
+
+## Struktur Direktori Proyek
 
 ```text
-├── scripts/                  # Skrip otomasi & launcher (.bat, .vbs)
-│   ├── start.bat
-│   ├── stop.bat
+.
+├── assets/                   # Aset visual & banner README
+│   └── banner.png
+├── scripts/                  # Skrip otomasi & launcher sistem (.bat, .vbs)
 │   ├── restart.bat
 │   ├── setup.bat
-│   └── start-hidden.vbs
-├── src/                      # Source code utama
-│   ├── bot.js                # Discord client & handler slash command
-│   ├── core/                 # Core engine Antigravity CLI & agent
-│   │   ├── agy-runner.js
+│   ├── start.bat
+│   ├── start-hidden.vbs
+│   └── stop.bat
+├── src/                      # Source code aplikasi
+│   ├── bot.js                # Discord client & handler interaksi
+│   ├── core/                 # Engine penghubung Antigravity CLI
 │   │   ├── agent.js
+│   │   ├── agy-runner.js
 │   │   └── tools.js
-│   └── services/             # Modular background services
+│   └── services/             # Modul background services
 │       ├── git-service.js
 │       ├── notes-service.js
 │       ├── quota-service.js
@@ -117,23 +166,22 @@ Setelah bot online di Discord, kirim pesan di channel atau gunakan slash command
 │       ├── voice-service.js
 │       └── watchdog-service.js
 ├── tests/                    # Pengujian modul
+├── config.example.json       # Template konfigurasi channel
 ├── index.js                  # Entry point aplikasi
-├── setup.js                  # CLI setup wizard interaktif
-├── config.example.json
-├── .env.example
-├── .gitignore
 ├── package.json
-└── README.md
+├── README.md
+└── setup.js                  # CLI setup wizard interaktif
 ```
 
 ---
 
-## 🔒 Keamanan (PENTING!)
+## Keamanan
 
-- **JANGAN PERNAH** membagikan atau meng-*commit* file `.env` kamu ke GitHub publik. File `.env` sudah dimasukkan ke dalam `.gitignore`.
-- Selalu isi `ALLOWED_USER_IDS` di file `.env` jika bot kamu berada di server Discord yang memiliki anggota lain, agar orang lain tidak bisa mengeksekusi perintah di laptop kamu.
+- Berkas `.env` menyimpan token sensitif dan sudah dimasukkan ke `.gitignore`. **Jangan pernah mengunggah berkas `.env` ke repository publik.**
+- Disarankan mengisi opsi `ALLOWED_USER_IDS` di berkas `.env` bila bot berada di server yang memiliki anggota lain, sehingga hak eksekusi dibatasi hanya untuk pemilik laptop.
 
 ---
 
-## 📄 Lisensi
-ISC License. Bebas dimodifikasi untuk kebutuhan pribadi atau tim.
+## Lisensi
+
+Didistribusikan di bawah lisensi [ISC](LICENSE). Bebas digunakan dan dimodifikasi untuk kebutuhan pribadi maupun tim.
