@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -11,6 +11,17 @@ function getAgyExecutable() {
     if (fs.existsSync(defaultWinAgy)) return defaultWinAgy;
   }
   return 'agy';
+}
+
+function killProcessTree(pid) {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
+    } else {
+      process.kill(-pid, 'SIGKILL');
+    }
+  } catch (_) {}
 }
 
 const AGY_PATH = getAgyExecutable();
@@ -26,6 +37,9 @@ ${notes}
 - Gunakan \`nama_file\` atau **nama_file**, JANGAN PERNAH gunakan link [nama](file:///...) karena Discord tidak mendukung link file lokal.
 - Untuk kode, perintah terminal, atau struktur direktori, SELALU gunakan blok kode \`\`\`bahasa ... \`\`\` yang jelas.
 - Gunakan blockquote (>) untuk penjelasan detail dan bullet point yang rapi.
+- ATURAN PENTING PERINTAH TERMINAL / DAEMON:
+  DILARANG menjalankan command server/tunnel yang berjalan terus menerus (misal: cloudflared, npm run dev, npm start, python app.py) secara synchronous foreground di terminal karena akan memblokir proses CLI selamanya!
+  Jika perlu menjalankan dev server atau tunnel, bot Discord sudah memiliki slash command otomatis: \`/preview <port>\` untuk Cloudflare Tunnel, dan \`/watch-server <cmd>\` untuk dev server dengan auto-restart.
 - FITUR KIRIM FILE KE DISCORD:
   Jika pengguna meminta kamu mengirimkan file, gambar, laporan, dokumen, PDF, source code, artefak, atau jika kamu membuat/mengedit file yang ingin kamu perlihatkan ke pengguna di Discord, sertakan tag berikut di bagian akhir jawabanmu:
   [ATTACH_FILE: <path_file_di_laptop>]
@@ -63,11 +77,20 @@ ${prompt}`;
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
+    // Pasang method killTree agar seluruh rantai child process mati total
+    child.killTree = () => {
+      child.killed = true;
+      if (child.pid) {
+        killProcessTree(child.pid);
+      }
+    };
+
     // Close stdin so agy doesn't wait for interactive input
     child.stdin.end();
 
     let stdoutBuffer = '';
     let finalResult = null;
+    let resultDispatched = false;
 
     child.stdout.on('data', chunk => {
       stdoutBuffer += chunk.toString();
@@ -95,6 +118,7 @@ ${prompt}`;
             }
           } else if (event === 'result' && data.result) {
             finalResult = data.result;
+            resultDispatched = true;
             if (onResult) onResult(data.result);
           }
         } catch (e) {
@@ -108,17 +132,35 @@ ${prompt}`;
     });
 
     child.on('error', err => {
-      if (onError) onError(err);
+      if (!resultDispatched && onError) {
+        resultDispatched = true;
+        onError(err);
+      }
     });
 
     child.on('close', (code, signal) => {
-      // If process was intentionally killed (by /stop or timeout timer), don't trigger raw error
+      // Jika proses sengaja dibatalkan via killTree (/stop atau timeout)
       if (child.killed) {
         return;
       }
-      if (code !== 0 && !finalResult) {
-        const exitReason = code !== null ? `kode ${code}` : (signal ? `sinyal ${signal}` : 'dihentikan paksa');
-        if (onError) onError(new Error(`Antigravity CLI berhenti (${exitReason})`));
+
+      // Pastikan selalu dispatch result atau error agar channel tidak terkunci
+      if (!resultDispatched) {
+        resultDispatched = true;
+        if (finalResult) {
+          if (onResult) onResult(finalResult);
+        } else if (stdoutBuffer && stdoutBuffer.trim()) {
+          // Output berupa plain text tanpa wrapper result
+          if (onResult) {
+            onResult({
+              response: stdoutBuffer.trim(),
+              status: code === 0 ? 'SUCCESS' : 'ERROR'
+            });
+          }
+        } else {
+          const exitReason = code !== null ? `kode ${code}` : (signal ? `sinyal ${signal}` : 'dihentikan paksa');
+          if (onError) onError(new Error(`Antigravity CLI selesai tanpa respon (${exitReason})`));
+        }
       }
     });
 
@@ -126,4 +168,4 @@ ${prompt}`;
   }
 }
 
-module.exports = { AgyRunner };
+module.exports = { AgyRunner, killProcessTree };

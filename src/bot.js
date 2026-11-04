@@ -885,9 +885,13 @@ class DiscordAntigravityBot {
       await interaction.reply('🧹 Sesi percakapan di channel ini telah di-reset (konteks baru dimulai)!');
     } else if (commandName === 'stop') {
       if (session.activeProcess) {
-        session.activeProcess.kill();
+        if (typeof session.activeProcess.killTree === 'function') {
+          session.activeProcess.killTree();
+        } else {
+          session.activeProcess.kill();
+        }
         session.activeProcess = null;
-        await interaction.reply('🛑 Proses Antigravity di channel ini telah dihentikan.');
+        await interaction.reply('🛑 Proses Antigravity di channel ini telah dihentikan total.');
       } else {
         await interaction.reply('ℹ️ Tidak ada proses yang sedang berjalan di channel ini.');
       }
@@ -1589,9 +1593,13 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       await message.reply({ files: [new AttachmentBuilder(resolved)] });
     } else if (cmd === 'stop') {
       if (session.activeProcess) {
-        session.activeProcess.kill();
+        if (typeof session.activeProcess.killTree === 'function') {
+          session.activeProcess.killTree();
+        } else {
+          session.activeProcess.kill();
+        }
         session.activeProcess = null;
-        await message.reply('🛑 Proses dihentikan.');
+        await message.reply('🛑 Proses dihentikan total.');
       } else {
         await message.reply('ℹ️ Tidak ada proses aktif.');
       }
