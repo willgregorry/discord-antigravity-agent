@@ -240,9 +240,6 @@ class DiscordAntigravityBot {
       new SlashCommandBuilder()
         .setName('screen')
         .setDescription('Ambil tangkapan layar live monitor laptop saat ini'),
-      new SlashCommandBuilder()
-        .setName('screenshot')
-        .setDescription('Ambil tangkapan layar live monitor laptop saat ini'),
 
       // 7. Interactive File Explorer
       new SlashCommandBuilder()
@@ -264,33 +261,24 @@ class DiscordAntigravityBot {
           .setRequired(false))
         .addStringOption(opt => opt.setName('text').setDescription('Isi catatan yang ingin ditambahkan (jika pilih add)').setRequired(false)),
 
-      // 9. Directory Tree
-      // Multi-Account Gemini Pro
+      // 9. Multi-Account Gemini Pro
       new SlashCommandBuilder()
         .setName('account')
         .setDescription('Kelola dan alihkan multi-akun Gemini Pro langsung dari Discord'),
-      new SlashCommandBuilder()
-        .setName('accounts')
-        .setDescription('Kelola dan alihkan multi-akun Gemini Pro langsung dari Discord'),
 
+      // 10. Directory Tree
       new SlashCommandBuilder()
         .setName('tree')
         .setDescription('Lihat struktur direktori lengkap project aktif saat ini')
         .addIntegerOption(opt => opt.setName('depth').setDescription('Kedalaman folder (default: 3, maks: 6)').setRequired(false))
         .addStringOption(opt => opt.setName('path').setDescription('Sub-folder spesifik yang ingin di-inspect (opsional)').setRequired(false)),
 
-      // 10. Voice Channel Assistant & Announcer
+      // 11. Voice Channel Assistant & Announcer
       new SlashCommandBuilder()
         .setName('join')
         .setDescription('Perintahkan bot untuk bergabung ke Voice Channel tempat kamu berada'),
       new SlashCommandBuilder()
-        .setName('join-vc')
-        .setDescription('Perintahkan bot untuk bergabung ke Voice Channel tempat kamu berada'),
-      new SlashCommandBuilder()
         .setName('leave')
-        .setDescription('Keluarkan bot dari Voice Channel'),
-      new SlashCommandBuilder()
-        .setName('leave-vc')
         .setDescription('Keluarkan bot dari Voice Channel'),
       new SlashCommandBuilder()
         .setName('say')
@@ -300,20 +288,23 @@ class DiscordAntigravityBot {
 
     const rest = new REST({ version: '10' }).setToken(this.token);
     try {
-      console.log('Registering slash commands (global)...');
-      await rest.put(
-        Routes.applicationCommands(this.client.user.id),
-        { body: commands.map(c => c.toJSON()) }
-      );
+      console.log('Cleaning up duplicate guild slash commands...');
       for (const [guildId] of this.client.guilds.cache) {
         try {
           await rest.put(
             Routes.applicationGuildCommands(this.client.user.id, guildId),
-            { body: commands.map(c => c.toJSON()) }
+            { body: [] }
           );
+          console.log(`Cleared duplicate guild commands for ${guildId}`);
         } catch (_) {}
       }
-      console.log('Slash commands registered successfully!');
+
+      console.log('Registering global slash commands (single source of truth)...');
+      await rest.put(
+        Routes.applicationCommands(this.client.user.id),
+        { body: commands.map(c => c.toJSON()) }
+      );
+      console.log('Slash commands registered cleanly without duplicates!');
     } catch (err) {
       console.error('Failed to register slash commands:', err);
     }
@@ -585,12 +576,15 @@ class DiscordAntigravityBot {
       .setTimestamp();
 
     let activeAccount = null;
-    if (data.activeAccountId) {
+    if (data.liveToken && data.liveToken.email) {
+      activeAccount = data.accounts.find(a => (a.email || '').toLowerCase() === data.liveToken.email.toLowerCase());
+    }
+    if (!activeAccount && data.activeAccountId) {
       activeAccount = data.accounts.find(a => a.id === data.activeAccountId);
     }
 
     const currentEmail = data.liveToken?.maskedEmail || '(Belum terdeteksi)';
-    const activeLabel = activeAccount ? activeAccount.label : 'Akun Aktif di Laptop';
+    const activeLabel = activeAccount ? activeAccount.label : (data.liveToken?.email ? 'Akun Baru (Belum Disimpan)' : 'Akun Aktif di Laptop');
 
     embed.addFields({
       name: '🟢 Akun yang Sedang Digunakan Saat Ini',

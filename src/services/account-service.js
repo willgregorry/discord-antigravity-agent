@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execFileSync } = require('child_process');
 
 class AccountService {
   constructor(rootDir) {
@@ -34,7 +35,45 @@ class AccountService {
     return homePath;
   }
 
+  readCredFromWinCred() {
+    if (process.platform !== 'win32') return null;
+    try {
+      const scriptPath = path.join(this.rootDir, 'scripts', 'cred_helper.ps1');
+      if (!fs.existsSync(scriptPath)) return null;
+      const out = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Action', 'read'], {
+        encoding: 'utf8',
+        timeout: 6000,
+        windowsHide: true
+      });
+      if (out && out.trim()) {
+        return JSON.parse(out.trim());
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  writeCredToWinCred(tokenJsonString) {
+    if (process.platform !== 'win32') return false;
+    try {
+      const scriptPath = path.join(this.rootDir, 'scripts', 'cred_helper.ps1');
+      if (!fs.existsSync(scriptPath)) return false;
+      execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Action', 'write'], {
+        input: tokenJsonString,
+        encoding: 'utf8',
+        timeout: 6000,
+        windowsHide: true
+      });
+      return true;
+    } catch (_) {}
+    return false;
+  }
+
   readLiveToken() {
+    // 1. Try Windows Credential Manager first on Windows
+    const winCred = this.readCredFromWinCred();
+    if (winCred) return winCred;
+
+    // 2. Fallback to file on disk
     const p = this.getLiveTokenPath();
     if (fs.existsSync(p)) {
       try {
@@ -85,7 +124,7 @@ class AccountService {
   saveCurrentLiveAccount(label) {
     const liveToken = this.readLiveToken();
     if (!liveToken) {
-      throw new Error('Tidak ditemukan file token aktif di laptop (antigravity-oauth-token). Pastikan kamu sudah pernah login di agy.');
+      throw new Error('Tidak ditemukan token aktif di laptop (Windows Credential Manager / file). Pastikan kamu sudah pernah login di agy.');
     }
 
     const email = liveToken.id_token_email || liveToken.email || 'unknown@google.com';
@@ -156,11 +195,14 @@ class AccountService {
     }
 
     const raw = fs.readFileSync(tokenFilePath, 'utf8');
-    const livePath = this.getLiveTokenPath();
+    
+    // 1. Write to Windows Credential Manager if on Windows
+    this.writeCredToWinCred(raw);
 
+    // 2. Also write to live file path for compatibility
+    const livePath = this.getLiveTokenPath();
     const liveDir = path.dirname(livePath);
     if (!fs.existsSync(liveDir)) fs.mkdirSync(liveDir, { recursive: true });
-
     fs.writeFileSync(livePath, raw, 'utf8');
 
     data.activeAccountId = accountId;
