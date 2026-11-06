@@ -330,7 +330,10 @@ class DiscordAntigravityBot {
       // 13. System Auto-Update & GitHub Sync
       new SlashCommandBuilder()
         .setName('update')
-        .setDescription('Periksa dan unduh pembaruan terbaru dari GitHub (git pull & auto-restart)')
+        .setDescription('Periksa dan unduh pembaruan terbaru dari GitHub (git pull & auto-restart)'),
+      new SlashCommandBuilder()
+        .setName('broadcast-update')
+        .setDescription('Siarkan kartu pengumuman update terbaru dengan tombol 1-Click Pull ke channel announcement')
     ];
 
     const rest = new REST({ version: '10' }).setToken(this.token);
@@ -1424,6 +1427,18 @@ class DiscordAntigravityBot {
       } catch (err) {
         await interaction.editReply(`❌ Error memeriksa update: ${err.message}`);
       }
+    } else if (commandName === 'broadcast-update') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const sent = await this.updateService.broadcastUpdateIfAvailable(this.client, true);
+        if (sent) {
+          await interaction.editReply('📢 **Berhasil menyiarkan pengumuman update ke channel announcement!**');
+        } else {
+          await interaction.editReply('ℹ️ Tidak dapat menyiarkan update (pastikan koneksi GitHub normal).');
+        }
+      } catch (err) {
+        await interaction.editReply(`❌ Gagal: ${err.message}`);
+      }
     } else if (commandName === 'help') {
       const payload = this.buildHelpPayload('help_overview');
       await interaction.reply(payload);
@@ -1916,6 +1931,17 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         this.updateService.triggerDelayedRestart(3);
       } catch (err) {
         await statusMsg.edit(`❌ Error update: ${err.message}`);
+      }
+    } else if (cmd === 'broadcast-update') {
+      try {
+        const sent = await this.updateService.broadcastUpdateIfAvailable(this.client, true);
+        if (sent) {
+          await message.reply('📢 **Pengumuman update berhasil disiarkan ke channel announcement!**');
+        } else {
+          await message.reply('ℹ️ Tidak dapat menyiarkan update.');
+        }
+      } catch (err) {
+        await message.reply(`❌ Gagal: ${err.message}`);
       }
     } else if (cmd === 'cd') {
       const target = args.join(' ');

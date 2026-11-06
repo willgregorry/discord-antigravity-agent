@@ -119,10 +119,10 @@ class UpdateService {
     if (!guild || !guild.channels) return null;
     const channels = guild.channels.cache;
 
-    // 1. Cari channel teks bernama general / umum / chat
+    // 1. Cari channel teks yang mengandung general / umum / chat
     const byName = channels.find(c =>
       c.type === ChannelType.GuildText &&
-      /^(general|umum|chat|main)$/i.test(c.name) &&
+      /(general|umum|chat|main)/i.test(c.name) &&
       c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages)
     );
     if (byName) return byName;
@@ -146,7 +146,7 @@ class UpdateService {
     // 1. Cari channel announcement/updates
     const byName = channels.find(c =>
       (c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement) &&
-      /^(announcement|announcements|updates|update|pengumuman|changelog)$/i.test(c.name) &&
+      /(announcement|announcements|updates|update|pengumuman|changelog)/i.test(c.name) &&
       c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages)
     );
     if (byName) return byName;
