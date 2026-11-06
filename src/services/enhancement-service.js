@@ -28,20 +28,70 @@ class EnhancementService {
     return null;
   }
 
+  async downloadTikTokViaTikwm(url, videoId) {
+    try {
+      const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
+      const res = await fetch(apiUrl);
+      const data = await res.json();
+      if (data && data.code === 0 && data.data) {
+        const videoUrl = data.data.play || data.data.wmplay;
+        const outPath = path.join(this.tempDir, `${videoId}.mp4`);
+        if (videoUrl) {
+          const dlRes = await fetch(videoUrl);
+          const buffer = Buffer.from(await dlRes.arrayBuffer());
+          fs.writeFileSync(outPath, buffer);
+        }
+        return {
+          id: videoId,
+          mediaPath: fs.existsSync(outPath) ? outPath : null,
+          title: data.data.title || 'TikTok AI Tips',
+          description: data.data.title || '',
+          uploader: (data.data.author && data.data.author.nickname) ? data.data.author.nickname : 'TikTok Creator',
+          subtitles: '',
+          url
+        };
+      }
+    } catch (e) {
+      console.warn('TikWM download fallback:', e.message);
+    }
+    return null;
+  }
+
   async downloadMedia(url) {
     const videoId = `vid_${Date.now()}`;
     const outputTemplate = path.join(this.tempDir, `${videoId}.%(ext)s`);
     const ffmpegPath = this.getFfmpegPath();
 
+    // 1. Coba download TikTok via TikWM API (cepat, bebas blokir 403)
+    if (url.includes('tiktok.com')) {
+      const tikwmResult = await this.downloadTikTokViaTikwm(url, videoId);
+      if (tikwmResult) return tikwmResult;
+    }
+
+    let targetUrl = url;
+    if (url.includes('vt.tiktok.com') || url.includes('vm.tiktok.com')) {
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+          },
+          redirect: 'follow'
+        });
+        if (res.url) targetUrl = res.url.split('?')[0];
+      } catch (_) {}
+    }
+
     const args = [
       '-m', 'yt_dlp',
       '--no-playlist',
+      '--impersonate', 'chrome',
       '--write-info-json',
       '--write-auto-sub',
       '--sub-lang', 'en,id',
       '-f', 'b[filesize<40M]/w/best',
       '-o', outputTemplate,
-      url
+      targetUrl
     ];
 
     if (ffmpegPath) {
