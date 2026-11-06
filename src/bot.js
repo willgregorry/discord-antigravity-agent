@@ -70,6 +70,7 @@ const { VoiceService } = require('./services/voice-service');
 const { TreeService } = require('./services/tree-service');
 const { AccountService } = require('./services/account-service');
 const { EnhancementService } = require('./services/enhancement-service');
+const { UpdateService } = require('./services/update-service');
 const ROOT_DIR = path.resolve(__dirname, '..');
 
 class ChannelSession {
@@ -135,6 +136,7 @@ class DiscordAntigravityBot {
     this._cachedModelsTime = 0;
     this.enhancementService = new EnhancementService(ROOT_DIR);
     this.pendingEnhancements = new Map();
+    this.updateService = new UpdateService(ROOT_DIR);
 
     this.client = new Client({
       intents: [
@@ -323,7 +325,12 @@ class DiscordAntigravityBot {
         .addStringOption(opt => opt.setName('url').setDescription('Link video Instagram Reels atau TikTok').setRequired(true)),
       new SlashCommandBuilder()
         .setName('enhancements')
-        .setDescription('Daftar skill & kaidah global yang sudah dipelajari bot (bisa on/off)')
+        .setDescription('Daftar skill & kaidah global yang sudah dipelajari bot (bisa on/off)'),
+
+      // 13. System Auto-Update & GitHub Sync
+      new SlashCommandBuilder()
+        .setName('update')
+        .setDescription('Periksa dan unduh pembaruan terbaru dari GitHub (git pull & auto-restart)')
     ];
 
     const rest = new REST({ version: '10' }).setToken(this.token);
@@ -385,6 +392,19 @@ class DiscordAntigravityBot {
       console.log(`🤖 Antigravity CLI Bridge is online as ${this.client.user.tag}!`);
       await this.registerSlashCommands();
 
+      // Sambutan Otomatis Pertama Kali di Guild & Polling Update Berkala
+      for (const [, guild] of this.client.guilds.cache) {
+        await this.updateService.sendWelcomeToGuild(guild);
+      }
+
+      setTimeout(() => {
+        this.updateService.broadcastUpdateIfAvailable(this.client);
+      }, 15000);
+
+      setInterval(() => {
+        this.updateService.broadcastUpdateIfAvailable(this.client);
+      }, 2 * 60 * 60 * 1000);
+
       // Battery Watcher Alert
       this.systemService.startBatteryWatcher(async (stats) => {
         console.log('[BATTERY WATCHER] Low battery alert:', stats.BatteryPercent);
@@ -405,6 +425,11 @@ class DiscordAntigravityBot {
           }
         }
       });
+    });
+
+    this.client.on('guildCreate', async (guild) => {
+      console.log(`[GUILD JOIN] Bergabung ke server baru: ${guild.name} (${guild.id})`);
+      await this.updateService.sendWelcomeToGuild(guild);
     });
 
     this.client.on('interactionCreate', async (interaction) => {
@@ -1374,6 +1399,31 @@ class DiscordAntigravityBot {
     } else if (commandName === 'enhancements') {
       const payload = this.buildEnhancementsPayload(interaction.channelId);
       await interaction.reply(payload);
+    } else if (commandName === 'update') {
+      await interaction.deferReply();
+      try {
+        const check = await this.updateService.checkUpdate();
+        if (!check.hasUpdate) {
+          await interaction.editReply(`✅ **Bot sudah menggunakan versi terbaru!**\n> 🔖 Build: \`${check.local.sha}\` (v${check.local.version})\n> 📝 *${check.local.message}*`);
+          return;
+        }
+
+        await interaction.editReply(`📥 **Mengunduh pembaruan dari GitHub...**\n> 🔖 Commit: \`${check.remote.sha}\` — *${check.remote.message}* oleh **${check.remote.author}**`);
+        const res = await this.updateService.executePullAndUpdate();
+        if (!res.success) {
+          await interaction.editReply(`❌ **Gagal memperbarui:**\n\`\`\`text\n${res.error}\n\`\`\``);
+          return;
+        }
+
+        await interaction.editReply(
+          `🎉 **Pembaruan Berhasil Diunduh!**\n` +
+          `\`\`\`text\n${res.pullOutput}\n\`\`\`\n` +
+          `> 🔄 Bot akan otomatis me-restart dalam 3 detik untuk menerapkan versi terbaru.`
+        );
+        this.updateService.triggerDelayedRestart(3);
+      } catch (err) {
+        await interaction.editReply(`❌ Error memeriksa update: ${err.message}`);
+      }
     } else if (commandName === 'help') {
       const payload = this.buildHelpPayload('help_overview');
       await interaction.reply(payload);
@@ -1442,6 +1492,25 @@ class DiscordAntigravityBot {
         embeds: [],
         components: []
       });
+      return;
+    } else if (customId === 'btn_pull_update') {
+      await interaction.deferReply();
+      try {
+        await interaction.editReply('📥 **Sedang melakukan `git pull origin main` dan menyiapkan update...**');
+        const res = await this.updateService.executePullAndUpdate();
+        if (!res.success) {
+          await interaction.editReply(`❌ **Gagal memperbarui bot:**\n\`\`\`text\n${res.error}\n\`\`\``);
+          return;
+        }
+        await interaction.editReply(
+          `🎉 **Pembaruan Berhasil Diunduh!**\n` +
+          `\`\`\`text\n${res.pullOutput}\n\`\`\`\n` +
+          `> 🔄 Bot sedang melakukan auto-restart di laptop Anda sekarang. Tunggu 5-10 detik.`
+        );
+        this.updateService.triggerDelayedRestart(3);
+      } catch (err) {
+        await interaction.editReply(`❌ Error update: ${err.message}`);
+      }
       return;
     } else if (customId === 'btn_save_current_acc') {
       const modal = new ModalBuilder()
@@ -1828,6 +1897,25 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         await statusMsg.edit({ content: '🎯 **Analisis Video Selesai!** Tinjau sebelum diterapkan:', embeds: [embed], components: [row] });
       } catch (err) {
         await statusMsg.edit(`❌ **Gagal menganalisis video:** ${err.message}`);
+      }
+    } else if (cmd === 'update') {
+      const statusMsg = await message.reply('🔍 Memeriksa pembaruan di GitHub...');
+      try {
+        const check = await this.updateService.checkUpdate();
+        if (!check.hasUpdate) {
+          await statusMsg.edit(`✅ **Bot sudah versi terbaru!** (Build: \`${check.local.sha}\` v${check.local.version})\n> 📝 *${check.local.message}*`);
+          return;
+        }
+        await statusMsg.edit(`📥 Mengunduh update: \`${check.remote.sha}\` — *${check.remote.message}*...`);
+        const res = await this.updateService.executePullAndUpdate();
+        if (!res.success) {
+          await statusMsg.edit(`❌ Gagal update: ${res.error}`);
+          return;
+        }
+        await statusMsg.edit(`🎉 **Update Berhasil!**\n\`\`\`text\n${res.pullOutput}\n\`\`\`\n> 🔄 Bot me-restart dalam 3 detik...`);
+        this.updateService.triggerDelayedRestart(3);
+      } catch (err) {
+        await statusMsg.edit(`❌ Error update: ${err.message}`);
       }
     } else if (cmd === 'cd') {
       const target = args.join(' ');

@@ -12,6 +12,7 @@ notes.json
 temp_downloads/
 accounts_data/
 enhancements_data/
+updates_data/
 tokens/
 *.log
 
