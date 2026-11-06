@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/version-v1.2.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/node-%3E%3D18.0.0-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node Version">
   <img src="https://img.shields.io/badge/discord.js-v14-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord.js">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform">
@@ -19,6 +20,9 @@
 ## Fitur Utama
 
 - **Kontrol AI Jarak Jauh**: Chat langsung dengan Antigravity CLI agent via channel atau thread Discord tanpa perlu membuka laptop.
+- **Continuous Learning dari Video (`/enhance`)**: Ekstrak tips koding, arsitektur, dan best practice langsung dari link video **TikTok** atau **Instagram Reels**, lalu terapkan ke system prompt secara **Global** atau **Per-Channel**.
+- **Multi-Account Manager (`/account`)**: Simpan dan beralih antar beberapa profil akun Google Gemini Pro dengan 1-klik di Discord tanpa batasan kuota.
+- **In-Bot Auto-Update (`/update` & `/broadcast-update`)**: Pantau pembaruan kode GitHub secara real-time dan perbarui bot di laptop hanya dengan menekan tombol `[🚀 Pull & Update Sekarang]`.
 - **Channel-to-Directory Mapping**: Otomatis memetakan nama channel Discord ke folder kerja proyek tertentu di laptop (contoh: `#web-app` otomatis membuka direktori proyek web).
 - **Two-Way File Attachment**:
   - Kirim berkas di Discord dan bot otomatis menyimpannya ke folder kerja lokal laptop.
@@ -117,6 +121,11 @@ Gunakan perintah `/help` di Discord untuk melihat panduan interaktif lengkap den
 | Perintah | Deskripsi |
 | :--- | :--- |
 | `/help` | Menampilkan panduan interaktif terstruktur per kategori |
+| `/enhance <url>` | Pelajari & ekstrak kaidah koding dari video TikTok / Reels |
+| `/enhancements` | Kelola skill aktif/nonaktif hasil pembelajaran video |
+| `/update` | Periksa dan unduh pembaruan terbaru dari GitHub (git pull) |
+| `/broadcast-update` | Siarkan kartu notifikasi update dengan tombol 1-Click Pull |
+| `/account` | Menu manajemen & switch profil multi-akun Gemini Pro |
 | `/tree` | Menampilkan struktur hierarki folder proyek aktif |
 | `/usage` | Cek kuota model Gemini dan waktu reset realtime |
 | `/pwd` | Tampilkan direktori kerja dan model AI aktif di channel ini |
@@ -157,12 +166,15 @@ Gunakan perintah `/help` di Discord untuk melihat panduan interaktif lengkap den
 │   │   ├── agy-runner.js
 │   │   └── tools.js
 │   └── services/             # Modul background services
+│       ├── account-service.js
+│       ├── enhancement-service.js
 │       ├── git-service.js
 │       ├── notes-service.js
 │       ├── quota-service.js
 │       ├── system-service.js
 │       ├── tree-service.js
 │       ├── tunnel-service.js
+│       ├── update-service.js
 │       ├── voice-service.js
 │       └── watchdog-service.js
 ├── tests/                    # Pengujian modul
