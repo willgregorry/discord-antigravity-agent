@@ -69,6 +69,7 @@ const { WatchdogService } = require('./services/watchdog-service');
 const { VoiceService } = require('./services/voice-service');
 const { TreeService } = require('./services/tree-service');
 const { AccountService } = require('./services/account-service');
+const { EnhancementService } = require('./services/enhancement-service');
 const ROOT_DIR = path.resolve(__dirname, '..');
 
 class ChannelSession {
@@ -132,6 +133,8 @@ class DiscordAntigravityBot {
     this.accountService = new AccountService(ROOT_DIR);
     this._cachedModels = null;
     this._cachedModelsTime = 0;
+    this.enhancementService = new EnhancementService(ROOT_DIR);
+    this.pendingEnhancements = new Map();
 
     this.client = new Client({
       intents: [
@@ -311,7 +314,16 @@ class DiscordAntigravityBot {
       new SlashCommandBuilder()
         .setName('say')
         .setDescription('Ucapkan pesan suara TTS di Voice Channel')
-        .addStringOption(opt => opt.setName('text').setDescription('Teks yang ingin diucapkan bot').setRequired(true))
+        .addStringOption(opt => opt.setName('text').setDescription('Teks yang ingin diucapkan bot').setRequired(true)),
+
+      // 12. Video Continuous Learning & Global Enhancements
+      new SlashCommandBuilder()
+        .setName('enhance')
+        .setDescription('Pelajari & terapkan kaidah koding/prompt baru dari video Instagram Reels atau TikTok')
+        .addStringOption(opt => opt.setName('url').setDescription('Link video Instagram Reels atau TikTok').setRequired(true)),
+      new SlashCommandBuilder()
+        .setName('enhancements')
+        .setDescription('Daftar skill & kaidah global yang sudah dipelajari bot (bisa on/off)')
     ];
 
     const rest = new REST({ version: '10' }).setToken(this.token);
@@ -717,6 +729,44 @@ class DiscordAntigravityBot {
 
     components.push(btnRow);
     return { embeds: [embed], components };
+  }
+
+  buildEnhancementsPayload() {
+    const list = this.enhancementService.getEnhancements();
+    if (list.length === 0) {
+      return {
+        content: '📚 **Belum ada Enhanced Skill global yang dipelajari.**\n> Gunakan command `/enhance url:<link>` dengan link Instagram Reels atau TikTok untuk mengajari bot teknik/best practice baru!',
+        ephemeral: true
+      };
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0x9b59b6)
+      .setTitle('📚 Global Learned Skills & Enhancements')
+      .setDescription(
+        'Daftar kaidah dan teknik koding yang dipelajari bot dari materi video. Skill yang **AKTIF** otomatis dipatuhi di **seluruh channel**.\n\n' +
+        list.map((e, idx) => {
+          const status = e.enabled ? '🟢 **AKTIF**' : '⚪ *Nonaktif*';
+          const ruleSample = e.rules?.[0] ? `\n> 💡 \`${e.rules[0]}\`` : '';
+          return `**${idx + 1}. ${e.title}** (${status})\n> 🏷️ \`${e.category || 'General'}\` • *${e.summary}*${ruleSample}`;
+        }).join('\n\n')
+      )
+      .setFooter({ text: `Total: ${list.length} Skill • Gunakan dropdown di bawah untuk On/Off` });
+
+    const options = list.slice(0, 25).map(e => ({
+      label: `${e.enabled ? '🟢' : '⚪'} ${e.title}`.slice(0, 100),
+      value: e.id,
+      description: `${e.category || 'Skill'} - Klik untuk ${e.enabled ? 'Matikan' : 'Aktifkan'}`.slice(0, 100)
+    }));
+
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('select_toggle_enhancement')
+        .setPlaceholder('Pilih Skill untuk Aktifkan / Nonaktifkan...')
+        .addOptions(options)
+    );
+
+    return { embeds: [embed], components: [row] };
   }
 
   buildHelpPayload(category = 'help_overview') {
@@ -1242,6 +1292,74 @@ class DiscordAntigravityBot {
       } catch (err) {
         await interaction.editReply(`❌ Gagal menghasilkan struktur direktori: ${err.message}`);
       }
+    } else if (commandName === 'enhance') {
+      const url = interaction.options.getString('url').trim();
+      if (!/^https?:\/\//i.test(url)) {
+        await interaction.reply({ content: '❌ Mohon masukkan link URL yang valid (Instagram Reels atau TikTok).', ephemeral: true });
+        return;
+      }
+
+      await interaction.deferReply();
+      try {
+        await interaction.editReply(`📥 **Mengunduh media video...**\n🔗 \`${url}\`\n> *Mohon tunggu, proses download & ekstraksi transkrip sedang berlangsung...*`);
+
+        const mediaData = await this.enhancementService.downloadMedia(url);
+
+        await interaction.editReply(`🧠 **Menganalisis konten video dengan AI...**\n📌 *${mediaData.title}* (\`${mediaData.uploader}\`)\n> *Mengekstrak kaidah koding, arsitektur, dan best practices...*`);
+
+        const analysis = await this.enhancementService.analyzeMedia(mediaData);
+        this.enhancementService.cleanTempMedia(mediaData.id);
+
+        if (!analysis || !analysis.title) {
+          throw new Error('AI tidak berhasil mengekstrak aturan koding yang spesifik dari video tersebut.');
+        }
+
+        const pendingId = `pen_${Date.now()}`;
+        this.pendingEnhancements.set(pendingId, {
+          ...analysis,
+          sourceUrl: url
+        });
+
+        setTimeout(() => {
+          this.pendingEnhancements.delete(pendingId);
+        }, 15 * 60 * 1000);
+
+        const rulesText = (analysis.rules || []).map((r, i) => `**${i + 1}.** ${r}`).join('\n') || '-';
+
+        const embed = new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle(`✨ [Preview Skill Baru] ${analysis.title}`)
+          .setDescription(`> *${analysis.summary}*`)
+          .addFields(
+            { name: '🏷️ Kategori', value: `\`${analysis.category || 'General'}\``, inline: true },
+            { name: '👤 Sumber Video', value: `[${mediaData.uploader}](${url})`, inline: true },
+            { name: '📜 Kaidah / Best Practice yang Diekstrak', value: rulesText, inline: false },
+            { name: '🤖 System Prompt Directive (Global)', value: `\`\`\`text\n${analysis.systemPromptInstruction || analysis.summary}\n\`\`\``, inline: false }
+          )
+          .setFooter({ text: 'Klik tombol di bawah untuk menerapkan skill ini ke SEMUA channel!' });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`btn_apply_enh_${pendingId}`)
+            .setLabel('✅ Terapkan ke Seluruh Channel')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`btn_cancel_enh_${pendingId}`)
+            .setLabel('❌ Batalkan')
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.editReply({
+          content: '🎯 **Analisis Video Selesai!** Tinjau kaidah baru berikut sebelum diterapkan:',
+          embeds: [embed],
+          components: [row]
+        });
+      } catch (err) {
+        await interaction.editReply(`❌ **Gagal menganalisis video:** ${err.message}`);
+      }
+    } else if (commandName === 'enhancements') {
+      const payload = this.buildEnhancementsPayload();
+      await interaction.reply(payload);
     } else if (commandName === 'help') {
       const payload = this.buildHelpPayload('help_overview');
       await interaction.reply(payload);
@@ -1265,6 +1383,29 @@ class DiscordAntigravityBot {
     } else if (customId === 'btn_usage_switch_acc') {
       const payload = this.buildAccountsPayload();
       await interaction.reply({ ...payload, ephemeral: true });
+      return;
+    } else if (customId.startsWith('btn_apply_enh_')) {
+      const pendingId = customId.replace('btn_apply_enh_', '');
+      const pending = this.pendingEnhancements.get(pendingId);
+      if (!pending) {
+        await interaction.reply({ content: '⚠️ Sesi konfirmasi skill ini telah kadaluarsa. Silakan jalankan `/enhance` kembali.', ephemeral: true });
+        return;
+      }
+      this.pendingEnhancements.delete(pendingId);
+      const saved = this.enhancementService.addEnhancement(pending);
+      await interaction.update({
+        content: `🎉 **Sukses! Skill "${saved.title}" Berhasil Diterapkan Secara Global!**\n> Seluruh channel koding aktif sekarang otomatis mematuhi kaidah ini.`,
+        components: []
+      });
+      return;
+    } else if (customId.startsWith('btn_cancel_enh_')) {
+      const pendingId = customId.replace('btn_cancel_enh_', '');
+      this.pendingEnhancements.delete(pendingId);
+      await interaction.update({
+        content: '🚫 **Penerapan skill dibatalkan.** Tidak ada kaidah baru yang ditambahkan.',
+        embeds: [],
+        components: []
+      });
       return;
     } else if (customId === 'btn_save_current_acc') {
       const modal = new ModalBuilder()
@@ -1488,6 +1629,22 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       return;
     }
 
+    if (interaction.customId === 'select_toggle_enhancement') {
+      const enhId = interaction.values[0];
+      try {
+        const toggled = this.enhancementService.toggleEnhancement(enhId);
+        const payload = this.buildEnhancementsPayload();
+        await interaction.update({
+          content: `🔄 Status skill **${toggled.title}** sekarang: ${toggled.enabled ? '🟢 **AKTIF (Dipatuhi Global)**' : '⚪ **NONAKTIF**'}`,
+          embeds: payload.embeds,
+          components: payload.components
+        });
+      } catch (err) {
+        await interaction.reply({ content: `❌ Gagal mengubah status skill: ${err.message}`, ephemeral: true });
+      }
+      return;
+    }
+
     if (interaction.customId === 'help_category_select') {
       const chosenCategory = interaction.values[0];
       const payload = this.buildHelpPayload(chosenCategory);
@@ -1589,6 +1746,48 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         const available = await this.getAvailableModels();
         const listStr = available.map(m => `• \`${m.value}\` — **${m.label}**`).join('\n');
         await message.reply(`🧠 **Model Aktif Saat Ini:** \`${session.model}\`\n\n**Daftar Model Tersedia:**\n${listStr}\n\n> *Ganti model: \`!model <nama_model>\` (contoh: \`!model argon\` atau \`!model gemini-3.8-flash-high\`)*`);
+      }
+    } else if (cmd === 'enhancements') {
+      const payload = this.buildEnhancementsPayload();
+      await message.reply(payload);
+    } else if (cmd === 'enhance') {
+      const url = args[0];
+      if (!url || !/^https?:\/\//i.test(url)) {
+        await message.reply('Contoh: `!enhance https://www.instagram.com/reel/...` atau `!enhance https://www.tiktok.com/...`');
+        return;
+      }
+      const statusMsg = await message.reply('📥 Mengunduh & menganalisis video tips...');
+      try {
+        const mediaData = await this.enhancementService.downloadMedia(url);
+        await statusMsg.edit('🧠 Menganalisis konten video dengan AI...');
+        const analysis = await this.enhancementService.analyzeMedia(mediaData);
+        this.enhancementService.cleanTempMedia(mediaData.id);
+        if (!analysis || !analysis.title) throw new Error('AI tidak berhasil mengekstrak aturan koding dari video.');
+
+        const pendingId = `pen_${Date.now()}`;
+        this.pendingEnhancements.set(pendingId, { ...analysis, sourceUrl: url });
+        const rulesText = (analysis.rules || []).map((r, i) => `**${i + 1}.** ${r}`).join('\n') || '-';
+
+        const embed = new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle(`✨ [Preview Skill Baru] ${analysis.title}`)
+          .setDescription(`> *${analysis.summary}*`)
+          .addFields(
+            { name: '🏷️ Kategori', value: `\`${analysis.category || 'General'}\``, inline: true },
+            { name: '👤 Sumber Video', value: `[${mediaData.uploader}](${url})`, inline: true },
+            { name: '📜 Kaidah yang Diekstrak', value: rulesText, inline: false },
+            { name: '🤖 System Prompt Directive (Global)', value: `\`\`\`text\n${analysis.systemPromptInstruction || analysis.summary}\n\`\`\``, inline: false }
+          )
+          .setFooter({ text: 'Klik tombol di bawah untuk menerapkan skill ini ke SEMUA channel!' });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`btn_apply_enh_${pendingId}`).setLabel('✅ Terapkan Global').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`btn_cancel_enh_${pendingId}`).setLabel('❌ Batalkan').setStyle(ButtonStyle.Secondary)
+        );
+
+        await statusMsg.edit({ content: '🎯 **Analisis Video Selesai!** Tinjau sebelum diterapkan:', embeds: [embed], components: [row] });
+      } catch (err) {
+        await statusMsg.edit(`❌ **Gagal menganalisis video:** ${err.message}`);
       }
     } else if (cmd === 'cd') {
       const target = args.join(' ');
@@ -1806,6 +2005,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         model: session.model,
         conversationId: session.conversationId,
         notes,
+        enhancements: this.enhancementService.getFormattedPromptBlock(),
         onInit: (initData) => {
           session.conversationId = initData.conversation_id;
         },
@@ -1940,6 +2140,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         model: session.model,
         conversationId: session.conversationId,
         notes: channelNotes,
+        enhancements: this.enhancementService.getFormattedPromptBlock(),
         onInit: (initData) => {
           session.conversationId = initData.conversation_id;
         },

@@ -11,6 +11,7 @@ sessions.json
 notes.json
 temp_downloads/
 accounts_data/
+enhancements_data/
 tokens/
 *.log
 

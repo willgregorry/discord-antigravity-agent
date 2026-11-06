@@ -27,10 +27,12 @@ function killProcessTree(pid) {
 const AGY_PATH = getAgyExecutable();
 
 class AgyRunner {
-  static runPrompt({ prompt, cwd, model, conversationId, notes, onInit, onToolStart, onToolDone, onTextDelta, onResult, onError }) {
+  static runPrompt({ prompt, cwd, model, conversationId, notes, enhancements, onInit, onToolStart, onToolDone, onTextDelta, onResult, onError }) {
     const notesBlock = notes ? `\n[Project Scratchpad / Notes untuk Channel ini:
 ${notes}
 ]\n` : '';
+
+    const enhancementsBlock = enhancements ? `\n${enhancements}\n` : '';
 
     const discordPrompt = `[Instruksi Format Tampilan Discord:
 - Format jawaban dengan Discord Markdown yang sangat rapi dan estetik untuk layar HP.
@@ -47,7 +49,7 @@ ${notes}
   [ATTACH_FILE: ./src/index.js]
   [ATTACH_FILE: ./README.md]
   Sistem bridge akan otomatis membaca file tersebut dari laptop dan mengunggahnya ke chat Discord sebagai lampiran (attachment)!
-]${notesBlock}
+]${notesBlock}${enhancementsBlock}
 
 ${prompt}`;
 
@@ -179,4 +181,4 @@ ${prompt}`;
   }
 }
 
-module.exports = { AgyRunner, killProcessTree };
+module.exports = { AgyRunner, killProcessTree, getAgyExecutable };
