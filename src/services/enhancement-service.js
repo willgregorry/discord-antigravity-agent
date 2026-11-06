@@ -34,7 +34,10 @@ class EnhancementService {
       const res = await fetch(apiUrl);
       const data = await res.json();
       if (data && data.code === 0 && data.data) {
-        const videoUrl = data.data.play || data.data.wmplay;
+        let videoUrl = data.data.play || data.data.wmplay;
+        if (videoUrl && !videoUrl.startsWith('http')) {
+          videoUrl = 'https://www.tikwm.com' + videoUrl;
+        }
         const outPath = path.join(this.tempDir, `${videoId}.mp4`);
         if (videoUrl) {
           const dlRes = await fetch(videoUrl);
