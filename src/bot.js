@@ -130,6 +130,8 @@ class DiscordAntigravityBot {
     this.watchdogService = new WatchdogService();
     this.voiceService = new VoiceService();
     this.accountService = new AccountService(ROOT_DIR);
+    this._cachedModels = null;
+    this._cachedModelsTime = 0;
 
     this.client = new Client({
       intents: [
@@ -200,7 +202,8 @@ class DiscordAntigravityBot {
         .setDescription('Pilih folder project dari daftar favorit via dropdown menu'),
       new SlashCommandBuilder()
         .setName('model')
-        .setDescription('Pilih model Antigravity (Gemini 3.8 Flash, Claude Sonnet 4.6, dll)'),
+        .setDescription('Pilih atau set model Antigravity (Gemini, Claude, Argon, dll)')
+        .addStringOption(opt => opt.setName('name').setDescription('Nama model (opsional jika ingin ketik manual, misal: argon)')),
       new SlashCommandBuilder()
         .setName('send')
         .setDescription('Kirim file dari laptop kamu ke channel Discord ini')
@@ -427,6 +430,42 @@ class DiscordAntigravityBot {
 
       await this.handlePromptMessage(message);
     });
+  }
+
+  async getAvailableModels() {
+    if (this._cachedModels && (Date.now() - this._cachedModelsTime < 60000)) {
+      return this._cachedModels;
+    }
+    try {
+      const models = await new Promise((resolve, reject) => {
+        const { execFile } = require('child_process');
+        execFile('agy', ['models'], { timeout: 8000, windowsHide: true }, (err, stdout) => {
+          if (err) return reject(err);
+          const lines = stdout.split(/\r?\n/);
+          const list = [];
+          for (const line of lines) {
+            if (!line.trim() || line.includes('Fetching available models')) continue;
+            const parts = line.split('\t');
+            if (parts.length >= 2) {
+              list.push({ value: parts[0].trim(), label: parts[1].trim() });
+            }
+          }
+          if (list.length > 0) resolve(list);
+          else reject(new Error('No models parsed from CLI'));
+        });
+      });
+      this._cachedModels = models;
+      this._cachedModelsTime = Date.now();
+      return models;
+    } catch (_) {
+      return this.config.available_models || [
+        { label: 'Gemini 3.8 Flash (Medium)', value: 'gemini-3.8-flash-medium' },
+        { label: 'Gemini 3.8 Flash (High Reasoning)', value: 'gemini-3.8-flash-high' },
+        { label: 'Claude Sonnet 4.6 (Thinking)', value: 'claude-sonnet-4-6' },
+        { label: 'Claude Opus 4.6 (Thinking)', value: 'claude-opus-4-6-thinking' },
+        { label: 'GPT-OSS 120B (Medium)', value: 'gpt-oss-120b-medium' }
+      ];
+    }
   }
 
   buildUsageEmbed(quotaData) {
@@ -862,21 +901,39 @@ class DiscordAntigravityBot {
         components: [row]
       });
     } else if (commandName === 'model') {
+      const customModel = interaction.options.getString('name');
+      if (customModel && customModel.trim()) {
+        session.model = customModel.trim();
+        this.saveSessions();
+        await interaction.reply(`🧠 **Model channel ini diubah menjadi:** \`${session.model}\``);
+        return;
+      }
+
+      await interaction.deferReply();
+      const availableModels = await this.getAvailableModels();
+      const options = availableModels.map(m => ({
+        label: m.label.slice(0, 100),
+        value: m.value.slice(0, 100),
+        default: m.value === session.model
+      }));
+
+      if (!options.some(o => o.value === session.model)) {
+        options.unshift({
+          label: `Kustom: ${session.model}`.slice(0, 100),
+          value: session.model.slice(0, 100),
+          default: true
+        });
+      }
+
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('select_model')
           .setPlaceholder('Pilih Model Antigravity...')
-          .addOptions(
-            this.config.available_models.map(m => ({
-              label: m.label,
-              value: m.value,
-              default: m.value === session.model
-            }))
-          )
+          .addOptions(options)
       );
 
-      await interaction.reply({
-        content: `🧠 **Pilih model Antigravity untuk channel ini:**\nModel aktif: \`\`\`${session.model}\`\`\``,
+      await interaction.editReply({
+        content: `🧠 **Pilih model Antigravity untuk channel ini:**\nModel aktif: \`\`\`${session.model}\`\`\`\n> 💡 *Daftar model disinkronkan langsung dari akun aktif kamu di CLI.*\n> *Ketik \`/model name:<nama_model>\` untuk memasukkan model kustom/khusus secara manual.*`,
         components: [row]
       });
     } else if (commandName === 'send') {
@@ -1405,6 +1462,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       try {
         const switched = this.accountService.switchAccount(accId);
         this.quotaService.clearCache();
+        this._cachedModels = null;
         const payload = this.buildAccountsPayload();
         await interaction.update({
           content: `🔄 **Berhasil Beralih Akun!** Sekarang Antigravity aktif menggunakan **${switched.label}** (\`${switched.maskedEmail}\`). Sesi koding kamu tetap aman!`,
@@ -1521,6 +1579,17 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       }
     } else if (cmd === 'pwd') {
       await message.reply(`📁 CWD: \`\`\`${session.cwd}\`\`\` | 🧠 Model: \`\`\`${session.model}\`\`\``);
+    } else if (cmd === 'model') {
+      const targetModel = args.join(' ').trim();
+      if (targetModel) {
+        session.model = targetModel;
+        this.saveSessions();
+        await message.reply(`🧠 Model Antigravity channel ini diganti ke:\n\`\`\`${targetModel}\`\`\``);
+      } else {
+        const available = await this.getAvailableModels();
+        const listStr = available.map(m => `• \`${m.value}\` — **${m.label}**`).join('\n');
+        await message.reply(`🧠 **Model Aktif Saat Ini:** \`${session.model}\`\n\n**Daftar Model Tersedia:**\n${listStr}\n\n> *Ganti model: \`!model <nama_model>\` (contoh: \`!model argon\` atau \`!model gemini-3.8-flash-high\`)*`);
+      }
     } else if (cmd === 'cd') {
       const target = args.join(' ');
       if (!target) {
