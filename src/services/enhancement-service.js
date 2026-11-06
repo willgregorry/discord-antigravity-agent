@@ -298,6 +298,8 @@ Balas HANYA dengan blok JSON valid persis seperti ini:
       rules: Array.isArray(data.rules) ? data.rules : [data.rules].filter(Boolean),
       systemPromptInstruction: data.systemPromptInstruction || data.summary || '',
       sourceUrl: data.sourceUrl || '',
+      scope: data.scope || 'global',
+      channelName: data.channelName || null,
       enabled: true,
       createdAt: new Date().toISOString()
     };
@@ -324,15 +326,22 @@ Balas HANYA dengan blok JSON valid persis seperti ini:
     return removed;
   }
 
-  getFormattedPromptBlock() {
-    const active = this.getEnhancements().filter(e => e.enabled);
+  getFormattedPromptBlock(channelId = null) {
+    const active = this.getEnhancements().filter(e => {
+      if (!e.enabled) return false;
+      if (!e.scope || e.scope === 'global') return true;
+      if (channelId && e.scope === channelId) return true;
+      return false;
+    });
+
     if (active.length === 0) return '';
 
     const lines = [];
-    lines.push('[GLOBAL LEARNED SKILLS & ENHANCED BEST PRACTICES:');
-    lines.push('Sebagai agent cerdas, patuhi seluruh kaidah dan teknik berikut yang telah dipelajari secara global:');
+    lines.push('[LEARNED SKILLS & ENHANCED BEST PRACTICES:');
+    lines.push('Sebagai agent cerdas, patuhi seluruh kaidah dan teknik berikut yang telah dipelajari:');
     for (const e of active) {
-      lines.push(`• [${e.title}] (${e.category}): ${e.systemPromptInstruction}`);
+      const scopeLabel = (!e.scope || e.scope === 'global') ? 'Global' : (e.channelName || 'Channel');
+      lines.push(`• [${e.title}] (${e.category} | ${scopeLabel}): ${e.systemPromptInstruction}`);
       if (e.rules && e.rules.length > 0) {
         for (const r of e.rules) {
           lines.push(`  - ${r}`);

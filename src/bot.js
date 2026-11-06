@@ -731,33 +731,41 @@ class DiscordAntigravityBot {
     return { embeds: [embed], components };
   }
 
-  buildEnhancementsPayload() {
+  buildEnhancementsPayload(channelId = null) {
     const list = this.enhancementService.getEnhancements();
     if (list.length === 0) {
       return {
-        content: '📚 **Belum ada Enhanced Skill global yang dipelajari.**\n> Gunakan command `/enhance url:<link>` dengan link Instagram Reels atau TikTok untuk mengajari bot teknik/best practice baru!',
+        content: '📚 **Belum ada Enhanced Skill yang dipelajari.**\n> Gunakan command `/enhance url:<link>` dengan link Instagram Reels atau TikTok untuk mengajari bot teknik/best practice baru!',
         ephemeral: true
       };
     }
 
     const embed = new EmbedBuilder()
       .setColor(0x9b59b6)
-      .setTitle('📚 Global Learned Skills & Enhancements')
+      .setTitle('📚 Learned Skills & Enhancements')
       .setDescription(
-        'Daftar kaidah dan teknik koding yang dipelajari bot dari materi video. Skill yang **AKTIF** otomatis dipatuhi di **seluruh channel**.\n\n' +
+        'Daftar kaidah dan teknik koding yang dipelajari bot dari video. Skill yang **AKTIF** otomatis dipatuhi sesuai cakupannya (Global atau per Channel).\n\n' +
         list.map((e, idx) => {
           const status = e.enabled ? '🟢 **AKTIF**' : '⚪ *Nonaktif*';
+          const scopeBadge = (!e.scope || e.scope === 'global') ? '🌐 `Global`' : `📍 \`${e.channelName || 'Channel'}\``;
+          const isHere = (!e.scope || e.scope === 'global') || (channelId && e.scope === channelId);
+          const hereBadge = isHere ? (e.enabled ? '• ⚡ *Aktif di channel ini*' : '') : '• *(Channel lain)*';
           const ruleSample = e.rules?.[0] ? `\n> 💡 \`${e.rules[0]}\`` : '';
-          return `**${idx + 1}. ${e.title}** (${status})\n> 🏷️ \`${e.category || 'General'}\` • *${e.summary}*${ruleSample}`;
+          return `**${idx + 1}. ${e.title}** (${status})\n> ${scopeBadge} • 🏷️ \`${e.category || 'General'}\` ${hereBadge}\n> *${e.summary}*${ruleSample}`;
         }).join('\n\n')
       )
       .setFooter({ text: `Total: ${list.length} Skill • Gunakan dropdown di bawah untuk On/Off` });
 
-    const options = list.slice(0, 25).map(e => ({
-      label: `${e.enabled ? '🟢' : '⚪'} ${e.title}`.slice(0, 100),
-      value: e.id,
-      description: `${e.category || 'Skill'} - Klik untuk ${e.enabled ? 'Matikan' : 'Aktifkan'}`.slice(0, 100)
-    }));
+    const options = list.slice(0, 25).map(e => {
+      const scopeIcon = (!e.scope || e.scope === 'global') ? '🌐' : '📍';
+      const statusIcon = e.enabled ? '🟢' : '⚪';
+      const scopeName = (!e.scope || e.scope === 'global') ? 'Global' : (e.channelName || 'Channel');
+      return {
+        label: `${statusIcon} ${scopeIcon} ${e.title}`.slice(0, 100),
+        value: e.id,
+        description: `[${scopeName}] ${e.category || 'Skill'} - Klik untuk ${e.enabled ? 'Matikan' : 'Aktifkan'}`.slice(0, 100)
+      };
+    });
 
     const row = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
@@ -1326,6 +1334,8 @@ class DiscordAntigravityBot {
 
         const rulesText = (analysis.rules || []).map((r, i) => `**${i + 1}.** ${r}`).join('\n') || '-';
 
+        const channelName = interaction.channel?.name ? `#${interaction.channel.name}` : 'Channel Ini';
+
         const embed = new EmbedBuilder()
           .setColor(0x9b59b6)
           .setTitle(`✨ [Preview Skill Baru] ${analysis.title}`)
@@ -1334,15 +1344,19 @@ class DiscordAntigravityBot {
             { name: '🏷️ Kategori', value: `\`${analysis.category || 'General'}\``, inline: true },
             { name: '👤 Sumber Video', value: `[${mediaData.uploader}](${url})`, inline: true },
             { name: '📜 Kaidah / Best Practice yang Diekstrak', value: rulesText, inline: false },
-            { name: '🤖 System Prompt Directive (Global)', value: `\`\`\`text\n${analysis.systemPromptInstruction || analysis.summary}\n\`\`\``, inline: false }
+            { name: '🤖 System Prompt Directive', value: `\`\`\`text\n${analysis.systemPromptInstruction || analysis.summary}\n\`\`\``, inline: false }
           )
-          .setFooter({ text: 'Klik tombol di bawah untuk menerapkan skill ini ke SEMUA channel!' });
+          .setFooter({ text: 'Pilih: Terapkan secara Global atau khusus untuk channel ini saja.' });
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`btn_apply_enh_${pendingId}`)
-            .setLabel('✅ Terapkan ke Seluruh Channel')
+            .setCustomId(`btn_apply_enh_global_${pendingId}`)
+            .setLabel('🌐 Terapkan Global')
             .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`btn_apply_enh_channel_${pendingId}`)
+            .setLabel(`📍 Terapkan di ${channelName}`.slice(0, 80))
+            .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId(`btn_cancel_enh_${pendingId}`)
             .setLabel('❌ Batalkan')
@@ -1358,7 +1372,7 @@ class DiscordAntigravityBot {
         await interaction.editReply(`❌ **Gagal menganalisis video:** ${err.message}`);
       }
     } else if (commandName === 'enhancements') {
-      const payload = this.buildEnhancementsPayload();
+      const payload = this.buildEnhancementsPayload(interaction.channelId);
       await interaction.reply(payload);
     } else if (commandName === 'help') {
       const payload = this.buildHelpPayload('help_overview');
@@ -1385,16 +1399,38 @@ class DiscordAntigravityBot {
       await interaction.reply({ ...payload, ephemeral: true });
       return;
     } else if (customId.startsWith('btn_apply_enh_')) {
-      const pendingId = customId.replace('btn_apply_enh_', '');
+      const parts = customId.split('_');
+      let scopeMode = 'global';
+      let pendingId = '';
+
+      if (parts[3] === 'global' || parts[3] === 'channel') {
+        scopeMode = parts[3];
+        pendingId = parts.slice(4).join('_');
+      } else {
+        pendingId = parts.slice(3).join('_');
+      }
+
       const pending = this.pendingEnhancements.get(pendingId);
       if (!pending) {
         await interaction.reply({ content: '⚠️ Sesi konfirmasi skill ini telah kadaluarsa. Silakan jalankan `/enhance` kembali.', ephemeral: true });
         return;
       }
       this.pendingEnhancements.delete(pendingId);
-      const saved = this.enhancementService.addEnhancement(pending);
+
+      const channelName = interaction.channel?.name ? `#${interaction.channel.name}` : 'Channel Ini';
+      const toSave = {
+        ...pending,
+        scope: scopeMode === 'channel' ? interaction.channelId : 'global',
+        channelName: scopeMode === 'channel' ? channelName : null
+      };
+
+      const saved = this.enhancementService.addEnhancement(toSave);
+      const scopeDesc = saved.scope === 'global'
+        ? 'secara **GLOBAL (Semua Channel)**'
+        : `khusus untuk channel **${channelName}**`;
+
       await interaction.update({
-        content: `🎉 **Sukses! Skill "${saved.title}" Berhasil Diterapkan Secara Global!**\n> Seluruh channel koding aktif sekarang otomatis mematuhi kaidah ini.`,
+        content: `🎉 **Sukses! Skill "${saved.title}" Berhasil Diterapkan ${scopeDesc}!**\n> AI sekarang otomatis mematuhi kaidah ini.`,
         components: []
       });
       return;
@@ -1633,9 +1669,10 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
       const enhId = interaction.values[0];
       try {
         const toggled = this.enhancementService.toggleEnhancement(enhId);
-        const payload = this.buildEnhancementsPayload();
+        const payload = this.buildEnhancementsPayload(interaction.channelId);
+        const scopeBadge = (!toggled.scope || toggled.scope === 'global') ? 'Global' : (toggled.channelName || 'Channel');
         await interaction.update({
-          content: `🔄 Status skill **${toggled.title}** sekarang: ${toggled.enabled ? '🟢 **AKTIF (Dipatuhi Global)**' : '⚪ **NONAKTIF**'}`,
+          content: `🔄 Status skill **${toggled.title}** (${scopeBadge}) sekarang: ${toggled.enabled ? '🟢 **AKTIF**' : '⚪ **NONAKTIF**'}`,
           embeds: payload.embeds,
           components: payload.components
         });
@@ -1748,7 +1785,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         await message.reply(`🧠 **Model Aktif Saat Ini:** \`${session.model}\`\n\n**Daftar Model Tersedia:**\n${listStr}\n\n> *Ganti model: \`!model <nama_model>\` (contoh: \`!model argon\` atau \`!model gemini-3.8-flash-high\`)*`);
       }
     } else if (cmd === 'enhancements') {
-      const payload = this.buildEnhancementsPayload();
+      const payload = this.buildEnhancementsPayload(message.channelId);
       await message.reply(payload);
     } else if (cmd === 'enhance') {
       const url = args[0];
@@ -1768,6 +1805,8 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         this.pendingEnhancements.set(pendingId, { ...analysis, sourceUrl: url });
         const rulesText = (analysis.rules || []).map((r, i) => `**${i + 1}.** ${r}`).join('\n') || '-';
 
+        const channelName = message.channel?.name ? `#${message.channel.name}` : 'Channel Ini';
+
         const embed = new EmbedBuilder()
           .setColor(0x9b59b6)
           .setTitle(`✨ [Preview Skill Baru] ${analysis.title}`)
@@ -1776,12 +1815,13 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
             { name: '🏷️ Kategori', value: `\`${analysis.category || 'General'}\``, inline: true },
             { name: '👤 Sumber Video', value: `[${mediaData.uploader}](${url})`, inline: true },
             { name: '📜 Kaidah yang Diekstrak', value: rulesText, inline: false },
-            { name: '🤖 System Prompt Directive (Global)', value: `\`\`\`text\n${analysis.systemPromptInstruction || analysis.summary}\n\`\`\``, inline: false }
+            { name: '🤖 System Prompt Directive', value: `\`\`\`text\n${analysis.systemPromptInstruction || analysis.summary}\n\`\`\``, inline: false }
           )
-          .setFooter({ text: 'Klik tombol di bawah untuk menerapkan skill ini ke SEMUA channel!' });
+          .setFooter({ text: 'Pilih: Terapkan secara Global atau khusus untuk channel ini saja.' });
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`btn_apply_enh_${pendingId}`).setLabel('✅ Terapkan Global').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`btn_apply_enh_global_${pendingId}`).setLabel('🌐 Terapkan Global').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`btn_apply_enh_channel_${pendingId}`).setLabel(`📍 Terapkan di ${channelName}`.slice(0, 80)).setStyle(ButtonStyle.Primary),
           new ButtonBuilder().setCustomId(`btn_cancel_enh_${pendingId}`).setLabel('❌ Batalkan').setStyle(ButtonStyle.Secondary)
         );
 
@@ -2005,7 +2045,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         model: session.model,
         conversationId: session.conversationId,
         notes,
-        enhancements: this.enhancementService.getFormattedPromptBlock(),
+        enhancements: this.enhancementService.getFormattedPromptBlock(session.channelId),
         onInit: (initData) => {
           session.conversationId = initData.conversation_id;
         },
@@ -2140,7 +2180,7 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
         model: session.model,
         conversationId: session.conversationId,
         notes: channelNotes,
-        enhancements: this.enhancementService.getFormattedPromptBlock(),
+        enhancements: this.enhancementService.getFormattedPromptBlock(session.channelId),
         onInit: (initData) => {
           session.conversationId = initData.conversation_id;
         },
