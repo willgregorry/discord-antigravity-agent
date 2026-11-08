@@ -18,6 +18,29 @@ class AccountService {
     if (!fs.existsSync(this.profilesPath)) {
       fs.writeFileSync(this.profilesPath, JSON.stringify({ activeAccountId: null, accounts: [] }, null, 2), 'utf8');
     }
+    this.ensureCredHelperExe();
+  }
+
+  ensureCredHelperExe() {
+    if (process.platform !== 'win32') return null;
+    const binDir = path.join(this.rootDir, 'bin');
+    const exePath = path.join(binDir, 'cred_helper.exe');
+    const csPath = path.join(this.rootDir, 'scripts', 'cred_helper.cs');
+    if (fs.existsSync(exePath)) return exePath;
+    if (!fs.existsSync(csPath)) return null;
+
+    try {
+      if (!fs.existsSync(binDir)) fs.mkdirSync(binDir, { recursive: true });
+      const cscPath = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
+      if (fs.existsSync(cscPath)) {
+        execFileSync(cscPath, ['/nologo', '/optimize', `/out:${exePath}`, csPath], {
+          timeout: 10000,
+          windowsHide: true
+        });
+        if (fs.existsSync(exePath)) return exePath;
+      }
+    } catch (_) {}
+    return null;
   }
 
   getLiveTokenPaths() {
@@ -42,25 +65,47 @@ class AccountService {
   }
 
   writeLiveToken(rawJsonString) {
+    let minified = rawJsonString;
+    let pretty = rawJsonString;
+    try {
+      const parsed = JSON.parse(rawJsonString);
+      minified = JSON.stringify(parsed);
+      pretty = JSON.stringify(parsed, null, 2);
+    } catch (_) {}
+
     const all = this.getLiveTokenPaths();
     for (const p of all) {
       try {
         const dir = path.dirname(p);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(p, rawJsonString, 'utf8');
+        fs.writeFileSync(p, pretty, 'utf8');
       } catch (_) {}
     }
-    this.writeCredToWinCred(rawJsonString);
+    return this.writeCredToWinCred(minified);
   }
 
   readCredFromWinCred() {
     if (process.platform !== 'win32') return null;
     try {
+      const exePath = this.ensureCredHelperExe();
+      if (exePath && fs.existsSync(exePath)) {
+        const out = execFileSync(exePath, ['read'], {
+          encoding: 'utf8',
+          timeout: 5000,
+          windowsHide: true
+        });
+        if (out && out.trim()) {
+          return JSON.parse(out.trim());
+        }
+      }
+    } catch (_) {}
+
+    try {
       const scriptPath = path.join(this.rootDir, 'scripts', 'cred_helper.ps1');
       if (!fs.existsSync(scriptPath)) return null;
       const out = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Action', 'read'], {
         encoding: 'utf8',
-        timeout: 6000,
+        timeout: 8000,
         windowsHide: true
       });
       if (out && out.trim()) {
@@ -72,13 +117,36 @@ class AccountService {
 
   writeCredToWinCred(tokenJsonString) {
     if (process.platform !== 'win32') return false;
+    let payload = tokenJsonString;
+    try {
+      payload = JSON.stringify(JSON.parse(tokenJsonString));
+    } catch (_) {}
+
+    try {
+      const exePath = this.ensureCredHelperExe();
+      if (exePath && fs.existsSync(exePath)) {
+        const tmpFile = path.join(this.dataDir, `.tmp_cred_${Date.now()}.json`);
+        fs.writeFileSync(tmpFile, payload, 'utf8');
+        try {
+          const out = execFileSync(exePath, ['write', tmpFile], {
+            encoding: 'utf8',
+            timeout: 5000,
+            windowsHide: true
+          });
+          if (out && out.trim() === 'OK') return true;
+        } finally {
+          try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
     try {
       const scriptPath = path.join(this.rootDir, 'scripts', 'cred_helper.ps1');
       if (!fs.existsSync(scriptPath)) return false;
       execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Action', 'write'], {
-        input: tokenJsonString,
+        input: payload,
         encoding: 'utf8',
-        timeout: 6000,
+        timeout: 8000,
         windowsHide: true
       });
       return true;
@@ -91,11 +159,22 @@ class AccountService {
     const winCred = this.readCredFromWinCred();
     if (winCred) {
       try {
+        const pretty = JSON.stringify(winCred, null, 2);
         const diskPaths = this.getLiveTokenPaths();
         for (const p of diskPaths) {
           const dir = path.dirname(p);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          fs.writeFileSync(p, JSON.stringify(winCred, null, 2), 'utf8');
+          fs.writeFileSync(p, pretty, 'utf8');
+        }
+        // Keep matching saved profile token fresh if agy refreshed access_token
+        const liveEmail = (winCred.id_token_email || winCred.email || '').toLowerCase();
+        if (liveEmail && winCred.refresh_token) {
+          const data = this.getProfilesData();
+          const matched = (data.accounts || []).find(a => (a.email || '').toLowerCase() === liveEmail);
+          if (matched) {
+            const savedPath = path.join(this.tokensDir, `${matched.id}.json`);
+            fs.writeFileSync(savedPath, pretty, 'utf8');
+          }
         }
       } catch (_) {}
       return winCred;
@@ -139,12 +218,25 @@ class AccountService {
   getAccounts() {
     const data = this.getProfilesData();
     const liveToken = this.readLiveToken();
+    const liveEmail = liveToken ? (liveToken.id_token_email || liveToken.email || null) : null;
+
+    if (liveEmail) {
+      const matched = (data.accounts || []).find(a => (a.email || '').toLowerCase() === liveEmail.toLowerCase());
+      if (matched && data.activeAccountId !== matched.id) {
+        data.activeAccountId = matched.id;
+        this.saveProfilesData(data);
+      } else if (!matched && data.activeAccountId) {
+        data.activeAccountId = null;
+        this.saveProfilesData(data);
+      }
+    }
+
     return {
       activeAccountId: data.activeAccountId,
       accounts: data.accounts || [],
       liveToken: liveToken ? {
-        email: liveToken.id_token_email || liveToken.email || null,
-        maskedEmail: this.maskEmail(liveToken.id_token_email || liveToken.email),
+        email: liveEmail,
+        maskedEmail: this.maskEmail(liveEmail),
         authMethod: liveToken.auth_method || 'oauth'
       } : null
     };
@@ -226,7 +318,14 @@ class AccountService {
     const raw = fs.readFileSync(tokenFilePath, 'utf8');
     
     // Write to ALL live token paths and Windows Credential Manager
-    this.writeLiveToken(raw);
+    const wroteCred = this.writeLiveToken(raw);
+    if (process.platform === 'win32') {
+      const verifyCred = this.readCredFromWinCred();
+      const verifyEmail = (verifyCred?.id_token_email || verifyCred?.email || '').toLowerCase();
+      if (!wroteCred || (target.email && verifyEmail !== target.email.toLowerCase())) {
+        throw new Error(`Gagal menyinkronkan kredensial Windows Credential Manager untuk ${target.label}.`);
+      }
+    }
 
     data.activeAccountId = accountId;
     this.saveProfilesData(data);

@@ -687,6 +687,8 @@ class DiscordAntigravityBot {
       inline: false
     });
 
+    const activeId = activeAccount ? activeAccount.id : data.activeAccountId;
+
     if (data.accounts.length === 0) {
       embed.addFields({
         name: '📋 Daftar Profil Tersimpan',
@@ -695,7 +697,7 @@ class DiscordAntigravityBot {
       });
     } else {
       const listText = data.accounts.map((acc, idx) => {
-        const isActive = acc.id === data.activeAccountId;
+        const isActive = acc.id === activeId;
         const badge = isActive ? '🟢 **[AKTIF]**' : '⚪';
         return `${idx + 1}. ${badge} **${acc.label}** (\`${acc.maskedEmail}\`)`;
       }).join('\n');
@@ -717,8 +719,8 @@ class DiscordAntigravityBot {
         label: acc.label.slice(0, 50),
         value: acc.id,
         description: acc.maskedEmail,
-        emoji: acc.id === data.activeAccountId ? '🟢' : '👤',
-        default: acc.id === data.activeAccountId
+        emoji: acc.id === activeId ? '🟢' : '👤',
+        default: acc.id === activeId
       }));
 
       const selectRow = new ActionRowBuilder().addComponents(
@@ -932,9 +934,9 @@ class DiscordAntigravityBot {
     if (commandName === 'usage') {
       await interaction.deferReply();
       try {
-        const data = await this.quotaService.fetchQuotaAndStatus();
-        const embed = this.buildUsageEmbed(data);
-        await interaction.editReply({ embeds: [embed] });
+        const data = await this.quotaService.fetchQuotaAndStatus(true);
+        const payload = this.buildUsagePayload(data);
+        await interaction.editReply(payload);
       } catch (err) {
         await interaction.editReply(`❌ Gagal mengambil data usage: ${err.message}`);
       }
@@ -1720,18 +1722,19 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
     if (interaction.customId === 'select_switch_account') {
       const accId = interaction.values[0];
+      await interaction.deferUpdate();
       try {
         const switched = this.accountService.switchAccount(accId);
         this.quotaService.clearCache();
         this._cachedModels = null;
         const payload = this.buildAccountsPayload();
-        await interaction.update({
+        await interaction.editReply({
           content: `🔄 **Berhasil Beralih Akun!** Sekarang Antigravity aktif menggunakan **${switched.label}** (\`${switched.maskedEmail}\`). Sesi koding kamu tetap aman!`,
           embeds: payload.embeds,
           components: payload.components
         });
       } catch (err) {
-        await interaction.reply({ content: `❌ Gagal beralih akun: ${err.message}`, ephemeral: true });
+        await interaction.followUp({ content: `❌ Gagal beralih akun: ${err.message}`, ephemeral: true });
       }
       return;
     } else if (interaction.customId === 'select_delete_account') {
@@ -1849,9 +1852,9 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
     if (cmd === 'usage' || cmd === 'kuota') {
       try {
-        const data = await this.quotaService.fetchQuotaAndStatus();
-        const embed = this.buildUsageEmbed(data);
-        await message.reply({ embeds: [embed] });
+        const data = await this.quotaService.fetchQuotaAndStatus(true);
+        const payload = this.buildUsagePayload(data);
+        await message.reply(payload);
       } catch (err) {
         await message.reply(`❌ Gagal mengambil data usage: ${err.message}`);
       }
