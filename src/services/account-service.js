@@ -89,7 +89,17 @@ class AccountService {
   readLiveToken() {
     // 1. Try Windows Credential Manager first on Windows
     const winCred = this.readCredFromWinCred();
-    if (winCred) return winCred;
+    if (winCred) {
+      try {
+        const diskPaths = this.getLiveTokenPaths();
+        for (const p of diskPaths) {
+          const dir = path.dirname(p);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(p, JSON.stringify(winCred, null, 2), 'utf8');
+        }
+      } catch (_) {}
+      return winCred;
+    }
 
     // 2. Fallback to live token files on disk
     const paths = this.getLiveTokenPaths();
