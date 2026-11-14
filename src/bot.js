@@ -2146,6 +2146,11 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
     const notes = this.notesService.getNotes(session.channelId);
     const timeoutMinutes = parseInt(process.env.TASK_TIMEOUT_MINUTES || '30', 10);
     const taskStartTime = Date.now();
+    let beforeQuota = null;
+    try {
+      beforeQuota = await this.quotaService.fetchQuotaAndStatus(false);
+    } catch (_) {}
+
     const timeoutTimer = setTimeout(() => {
       if (session.activeProcess) {
         session.activeProcess.kill();
@@ -2201,8 +2206,14 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
             ? `${elapsedSec}s`
             : `${Math.floor(elapsedMs / 60000)}m ${Math.round((elapsedMs % 60000) / 1000)}s`;
 
+          let quotaBadge = '';
+          try {
+            const afterQuota = await this.quotaService.fetchQuotaAndStatus(true);
+            quotaBadge = this.quotaService.calculateConsumptionBadge(session.model, beforeQuota, afterQuota, result.usage);
+          } catch (_) {}
+
           await statusMsg.edit(`✨ **Perbaikan Selesai!** ⏱️ ${durationStr} • 📁 \`${session.cwd}\``).catch(() => {});
-          await this.sendLargeMessage(channel, formatDiscordText(rawResponse), fileAttachments);
+          await this.sendLargeMessage(channel, formatDiscordText(rawResponse) + quotaBadge, fileAttachments);
         },
         onError: async (err) => {
           clearTimeout(timeoutTimer);
@@ -2289,6 +2300,10 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
 
     const channelNotes = this.notesService.getNotes(session.channelId);
     const taskStartTime = Date.now();
+    let beforeQuota = null;
+    try {
+      beforeQuota = await this.quotaService.fetchQuotaAndStatus(false);
+    } catch (_) {}
 
     try {
       session.activeProcess = AgyRunner.runPrompt({
@@ -2362,8 +2377,14 @@ Tolong telusuri file yang bersangkutan, identifikasi bug penyebab error, perbaik
             : `${Math.floor(elapsedMs / 60000)}m ${Math.round((elapsedMs % 60000) / 1000)}s`;
           const turns = result.num_turns ? `• ${result.num_turns} turns ` : '';
 
+          let quotaBadge = '';
+          try {
+            const afterQuota = await this.quotaService.fetchQuotaAndStatus(true);
+            quotaBadge = this.quotaService.calculateConsumptionBadge(session.model, beforeQuota, afterQuota, result.usage);
+          } catch (_) {}
+
           await statusMsg.edit(`✨ **Selesai!** ⏱️ ${durationStr} ${turns}• 📁 \`${session.cwd}\``).catch(() => {});
-          await this.sendLargeMessage(message.channel, responseText, fileAttachments);
+          await this.sendLargeMessage(message.channel, responseText + quotaBadge, fileAttachments);
 
           // Announce in Voice Channel if connected
           if (message.guildId && this.voiceService.isConnected(message.guildId)) {
