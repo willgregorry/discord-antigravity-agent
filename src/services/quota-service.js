@@ -219,6 +219,95 @@ class QuotaService {
     return result;
   }
 
+  resolveGroupForModel(modelName, quotaData) {
+    const m = (modelName || '').toLowerCase();
+    const groups = quotaData?.groups || [];
+    if (groups.length === 0) return null;
+
+    // Check Argon first
+    if (m.includes('argon')) {
+      const argonGroup = groups.find(g => (g.name || '').toLowerCase().includes('argon'));
+      if (argonGroup) return argonGroup;
+    }
+
+    // Check Claude or GPT
+    if (m.includes('claude') || m.includes('gpt') || m.includes('sonnet') || m.includes('opus')) {
+      const claudeGroup = groups.find(g => {
+        const n = (g.name || '').toLowerCase();
+        return n.includes('claude') || n.includes('gpt') || n.includes('3p');
+      });
+      if (claudeGroup) return claudeGroup;
+    }
+
+    // Default to Gemini Models
+    const geminiGroup = groups.find(g => (g.name || '').toLowerCase().includes('gemini'));
+    return geminiGroup || groups[0];
+  }
+
+  formatTokenCount(n) {
+    if (!n || isNaN(n)) return '0';
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+    return n.toLocaleString();
+  }
+
+  calculateConsumptionBadge(modelName, beforeQuota, afterQuota, rawUsage = null) {
+    if (!afterQuota) return '';
+    const group = this.resolveGroupForModel(modelName, afterQuota);
+    if (!group || !Array.isArray(group.buckets) || group.buckets.length === 0) return '';
+
+    const beforeGroup = beforeQuota ? this.resolveGroupForModel(modelName, beforeQuota) : null;
+
+    // Cari bucket 5h dan weekly
+    const b5h = group.buckets.find(b => b.window === '5h' || (b.id || '').includes('5h'));
+    const bWeekly = group.buckets.find(b => b.window === 'weekly' || (b.id || '').includes('weekly')) || group.buckets[0];
+
+    const targetBucket = b5h || bWeekly;
+    let consumedStr = '<0.01%';
+
+    if (beforeGroup && targetBucket) {
+      const beforeBucket = (beforeGroup.buckets || []).find(b => b.id === targetBucket.id || b.window === targetBucket.window);
+      if (beforeBucket && beforeBucket.remainingFraction !== undefined && targetBucket.remainingFraction !== undefined) {
+        const delta = (beforeBucket.remainingFraction - targetBucket.remainingFraction) * 100;
+        if (delta > 0.001) {
+          consumedStr = `-${delta.toFixed(2)}%`;
+        } else if (delta < -0.01) {
+          consumedStr = `refreshed`;
+        }
+      }
+    }
+
+    // Format persentase sisa
+    const parts = [];
+    if (b5h && b5h.remainingFraction !== undefined) {
+      const pct5h = (Math.max(0, Math.min(1, b5h.remainingFraction)) * 100).toFixed(1);
+      parts.push(`5h: ${pct5h}%`);
+    }
+    if (bWeekly && bWeekly.remainingFraction !== undefined) {
+      const pctW = (Math.max(0, Math.min(1, bWeekly.remainingFraction)) * 100).toFixed(1);
+      parts.push(`Weekly: ${pctW}%`);
+    }
+
+    const quotaStatus = parts.length > 0 ? parts.join(' | ') : '100%';
+    const modelTag = modelName || group.name || 'AI Model';
+
+    // Rincian token
+    let tokenDetail = '';
+    if (rawUsage) {
+      const outTokens = this.formatTokenCount(rawUsage.output_tokens);
+      const cacheTokens = this.formatTokenCount(rawUsage.cache_read_tokens || rawUsage.input_tokens);
+      tokenDetail = `\nTokens: ${outTokens} out • ${cacheTokens} context/cache`;
+    }
+
+    return (
+      `\n\n\`\`\`yaml\n` +
+      `[Model Quota & Usage]\n` +
+      `Model : ${modelTag}\n` +
+      `Cost  : ${consumedStr} (Sisa: ${quotaStatus})${tokenDetail}\n` +
+      `\`\`\``
+    );
+  }
+
   formatCliUsageScreen(quotaData, accountEmail) {
     const lines = [];
     lines.push('\u001b[1;37m└ Models & Quota\u001b[0m');

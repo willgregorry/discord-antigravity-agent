@@ -13,6 +13,9 @@ function getAgyExecutable() {
   return 'agy';
 }
 
+/**
+ * Terminates a process and its entire child tree (e.g. spawned MCP servers).
+ */
 function killProcessTree(pid) {
   if (!pid) return;
   try {
@@ -26,6 +29,10 @@ function killProcessTree(pid) {
 
 const AGY_PATH = getAgyExecutable();
 
+/**
+ * Spawns the local Antigravity CLI (`agy`) in `--output-format stream-json` mode
+ * and streams structured lifecycle events (`init`, `step_update`, `result`) back to callers.
+ */
 class AgyRunner {
   static runPrompt({ prompt, cwd, model, conversationId, notes, enhancements, onInit, onToolStart, onToolDone, onTextDelta, onResult, onError }) {
     const notesBlock = notes ? `\n[Project Scratchpad / Notes untuk Channel ini:
