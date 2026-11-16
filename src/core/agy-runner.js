@@ -1,6 +1,7 @@
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { buildDiscordPrompt } = require('./prompt-builder');
 
 function getAgyExecutable() {
   if (process.env.AGY_PATH && fs.existsSync(process.env.AGY_PATH)) {
@@ -35,30 +36,7 @@ const AGY_PATH = getAgyExecutable();
  */
 class AgyRunner {
   static runPrompt({ prompt, cwd, model, conversationId, notes, enhancements, onInit, onToolStart, onToolDone, onTextDelta, onResult, onError }) {
-    const notesBlock = notes ? `\n[Project Scratchpad / Notes untuk Channel ini:
-${notes}
-]\n` : '';
-
-    const enhancementsBlock = enhancements ? `\n${enhancements}\n` : '';
-
-    const discordPrompt = `[Instruksi Format Tampilan Discord:
-- Format jawaban dengan Discord Markdown yang sangat rapi dan estetik untuk layar HP.
-- Gunakan \`nama_file\` atau **nama_file**, JANGAN PERNAH gunakan link [nama](file:///...) karena Discord tidak mendukung link file lokal.
-- Untuk kode, perintah terminal, atau struktur direktori, SELALU gunakan blok kode \`\`\`bahasa ... \`\`\` yang jelas.
-- Gunakan blockquote (>) untuk penjelasan detail dan bullet point yang rapi.
-- ATURAN PENTING PERINTAH TERMINAL / DAEMON:
-  DILARANG menjalankan command server/tunnel yang berjalan terus menerus (misal: cloudflared, npm run dev, npm start, python app.py) secara synchronous foreground di terminal karena akan memblokir proses CLI selamanya!
-  Jika perlu menjalankan dev server atau tunnel, bot Discord sudah memiliki slash command otomatis: \`/preview <port>\` untuk Cloudflare Tunnel, dan \`/watch-server <cmd>\` untuk dev server dengan auto-restart.
-- FITUR KIRIM FILE KE DISCORD:
-  Jika pengguna meminta kamu mengirimkan file, gambar, laporan, dokumen, PDF, source code, artefak, atau jika kamu membuat/mengedit file yang ingin kamu perlihatkan ke pengguna di Discord, sertakan tag berikut di bagian akhir jawabanmu:
-  [ATTACH_FILE: <path_file_di_laptop>]
-  Contoh:
-  [ATTACH_FILE: ./src/index.js]
-  [ATTACH_FILE: ./README.md]
-  Sistem bridge akan otomatis membaca file tersebut dari laptop dan mengunggahnya ke chat Discord sebagai lampiran (attachment)!
-]${notesBlock}${enhancementsBlock}
-
-${prompt}`;
+    const discordPrompt = buildDiscordPrompt({ prompt, notes, enhancements });
 
     const args = [
       '--print', discordPrompt,

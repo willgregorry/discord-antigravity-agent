@@ -66,6 +66,7 @@ class DiscordAntigravityBot {
       enhancementService: new EnhancementService(ROOT_DIR),
       updateService,
       pendingEnhancements: new Map(),
+      pendingQuestions: new Map(),
       getAvailableModels: () => this.getAvailableModels(),
       clearModelCache: () => { this._cachedModels = null; }
     };

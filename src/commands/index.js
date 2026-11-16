@@ -5,6 +5,7 @@ const createDevopsCommands = require('./devops.commands');
 const createSystemCommands = require('./system.commands');
 const createVoiceCommands = require('./voice.commands');
 const createMetaCommands = require('./meta.commands');
+const createInteractiveCommands = require('./interactive.commands');
 
 /**
  * Central registry of command modules.
@@ -19,7 +20,8 @@ function getCommandModules() {
     createDevopsCommands,
     createSystemCommands,
     createVoiceCommands,
-    createMetaCommands
+    createMetaCommands,
+    createInteractiveCommands
   ];
 }
 
