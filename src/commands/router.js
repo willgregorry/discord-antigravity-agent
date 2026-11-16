@@ -13,7 +13,7 @@ class CommandRouter {
     this.prefixHandlers = new Map();
     this.buttonMatchers = [];
     this.selectHandlers = new Map();
-    this.modalHandlers = new Map();
+    this.modalMatchers = [];
 
     for (const modFactory of modules) {
       const mod = typeof modFactory === 'function' ? modFactory(ctx) : modFactory;
@@ -39,8 +39,12 @@ class CommandRouter {
         }
       }
       if (mod.modals) {
-        for (const [id, fn] of Object.entries(mod.modals)) {
-          this.modalHandlers.set(id, fn);
+        if (Array.isArray(mod.modals)) {
+          this.modalMatchers.push(...mod.modals);
+        } else {
+          for (const [id, fn] of Object.entries(mod.modals)) {
+            this.modalMatchers.push({ match: id, handle: fn });
+          }
         }
       }
     }
@@ -96,8 +100,15 @@ class CommandRouter {
     }
 
     if (interaction.isModalSubmit()) {
-      const handler = this.modalHandlers.get(interaction.customId);
-      if (handler) await handler(interaction, session, this.ctx);
+      for (const entry of this.modalMatchers) {
+        const matched = typeof entry.match === 'function'
+          ? entry.match(interaction.customId)
+          : entry.match === interaction.customId;
+        if (matched) {
+          await entry.handle(interaction, session, this.ctx);
+          return;
+        }
+      }
     }
   }
 

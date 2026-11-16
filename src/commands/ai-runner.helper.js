@@ -3,6 +3,7 @@ const path = require('path');
 const { AgyRunner } = require('../core/agy-runner');
 const { formatDiscordText, sendLargeMessage } = require('../utils/discord-format');
 const { extractFileAttachments, ensureChannelTempDir } = require('../utils/file-helper');
+const { extractAskUserBlocks, buildAskUserPayload } = require('../utils/ask-user-helper');
 
 /**
  * Formats an elapsed millisecond duration as `12.3s` or `2m 15s`.
@@ -143,8 +144,9 @@ async function executeAiPrompt({ channel, replyMessage = null, session, promptTe
         ctx.sessionManager.saveSessions();
 
         const fallbackText = isAutoFix ? '*(Perbaikan selesai)*' : '*(Tidak ada teks respons)*';
-        const { cleanText, attachments } = extractFileAttachments(result.response || fallbackText, session.cwd);
-        const responseText = formatDiscordText(cleanText || '*(File terlampir)*');
+        const { cleanText: withoutFiles, attachments } = extractFileAttachments(result.response || fallbackText, session.cwd);
+        const { cleanText, questions } = extractAskUserBlocks(withoutFiles);
+        const responseText = formatDiscordText(cleanText || (questions.length > 0 ? '' : '*(File terlampir)*'));
 
         const durationStr = formatDuration(Date.now() - taskStartTime);
         const turns = result.num_turns ? `• ${result.num_turns} turns ` : '';
@@ -157,7 +159,17 @@ async function executeAiPrompt({ channel, replyMessage = null, session, promptTe
 
         const doneTitle = isAutoFix ? 'Perbaikan Selesai!' : 'Selesai!';
         await statusMsg.edit(`✨ **${doneTitle}** ⏱️ ${durationStr} ${turns}• 📁 \`${session.cwd}\``).catch(() => {});
-        await sendLargeMessage(channel, responseText + quotaBadge, attachments);
+
+        if (responseText || attachments.length > 0) {
+          await sendLargeMessage(channel, responseText + quotaBadge, attachments);
+        } else if (quotaBadge) {
+          await sendLargeMessage(channel, quotaBadge.trim(), []);
+        }
+
+        for (const askData of questions) {
+          const askPayload = buildAskUserPayload(askData, session.channelId, ctx);
+          await channel.send(askPayload);
+        }
 
         if (!isAutoFix && guildId && ctx.voiceService.isConnected(guildId)) {
           const chanName = channel?.name ? `channel ${channel.name}` : 'channel ini';
