@@ -185,7 +185,8 @@ async function runEnhanceFlow({ url, channelName, updateProgress, ctx }) {
 
   const pendingId = `pen_${Date.now()}`;
   ctx.pendingEnhancements.set(pendingId, { ...analysis, sourceUrl: url });
-  setTimeout(() => ctx.pendingEnhancements.delete(pendingId), 15 * 60 * 1000);
+  const ttlTimer = setTimeout(() => ctx.pendingEnhancements.delete(pendingId), 15 * 60 * 1000);
+  if (typeof ttlTimer.unref === 'function') ttlTimer.unref();
 
   const rulesText = (analysis.rules || []).map((r, i) => `**${i + 1}.** ${r}`).join('\n') || '-';
   const embed = new EmbedBuilder()

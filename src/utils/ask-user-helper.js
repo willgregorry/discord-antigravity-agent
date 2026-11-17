@@ -104,9 +104,10 @@ function buildAskUserPayload(askData, channelId, ctx) {
     createdAt: Date.now()
   });
 
-  setTimeout(() => {
+  const ttlTimer = setTimeout(() => {
     ctx.pendingQuestions.delete(qId);
   }, QUESTION_TTL_MS);
+  if (typeof ttlTimer.unref === 'function') ttlTimer.unref();
 
   const optionList = options.length > 0
     ? options.map((opt, idx) => `**${idx + 1}.** ${opt}`).join('\n')

@@ -128,17 +128,37 @@ class DiscordAntigravityBot {
 
       this.ctx.systemService.startBatteryWatcher(async (stats) => {
         console.log('[BATTERY WATCHER] Low battery alert:', stats.BatteryPercent);
-        const targetChannelId = this.sessionManager.getFirstChannelId();
-        if (!targetChannelId) return;
+        const embed = new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle('⚠️ Peringatan Baterai Laptop Lemah!')
+          .setDescription(`Sisa baterai laptop kamu tinggal **${stats.BatteryPercent}%** dan tidak terhubung ke charger.\nSegera tancapkan charger atau gunakan \`/sleep\` / \`/shutdown\` dari HP jika kamu sedang di luar!`)
+          .setTimestamp();
+
         try {
-          const ch = await this.client.channels.fetch(targetChannelId);
-          if (!ch) return;
-          const embed = new EmbedBuilder()
-            .setColor(0xe74c3c)
-            .setTitle('⚠️ Peringatan Baterai Laptop Lemah!')
-            .setDescription(`Sisa baterai laptop kamu tinggal **${stats.BatteryPercent}%** dan tidak terhubung ke charger.\nSegera tancapkan charger atau gunakan \`/sleep\` / \`/shutdown\` dari HP jika kamu sedang di luar!`)
-            .setTimestamp();
-          await ch.send({ embeds: [embed] });
+          if (process.env.BATTERY_ALERT_CHANNEL_ID) {
+            const ch = await this.client.channels.fetch(process.env.BATTERY_ALERT_CHANNEL_ID);
+            if (ch) {
+              await ch.send({ embeds: [embed] });
+              return;
+            }
+          }
+
+          let sent = false;
+          for (const [, guild] of this.client.guilds.cache) {
+            const targetChannel = this.ctx.updateService.findAnnouncementChannel(guild);
+            if (targetChannel) {
+              await targetChannel.send({ embeds: [embed] });
+              sent = true;
+            }
+          }
+
+          if (!sent) {
+            const fallbackId = this.sessionManager.getFirstChannelId();
+            if (fallbackId) {
+              const ch = await this.client.channels.fetch(fallbackId);
+              if (ch) await ch.send({ embeds: [embed] });
+            }
+          }
         } catch (e) {
           console.error('Battery alert send error:', e);
         }
